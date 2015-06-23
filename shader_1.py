@@ -1,4 +1,4 @@
-# From http://pyopengl.sourceforge.net/context/tutorials/shader_5.html
+# From http://pyopengl.sourceforge.net/context/tutorials/shader_6.html
 import re
 import textwrap
 import collections
@@ -9,6 +9,7 @@ from OpenGLContext import testingcontext
 from OpenGL import GL as G
 from OpenGL.arrays import vbo
 from OpenGL.GL import shaders
+from OpenGLContext.scenegraph.basenodes import Sphere
 
 BaseContext = testingcontext.getInteractive()
 
@@ -180,83 +181,89 @@ class TestContext(BaseContext):
     """
     def OnInit(self):
         self.shader = Shader.compile("""
-        float phong_weightCalc(
-            in vec3 light_pos, // light position
-            in vec3 frag_normal // geometry normal
-        ) {
-            // returns vec2( ambientMult, diffuseMult )
-            float n_dot_pos = max( 0.0, dot(
-                frag_normal, light_pos
-            ));
-            return n_dot_pos;
-        }
-
-        uniform vec4 Global_ambient;
-        uniform vec4 Light_ambient;
-        uniform vec4 Light_diffuse;
-        uniform vec3 Light_location;
-        uniform vec4 Material_ambient;
-        uniform vec4 Material_diffuse;
         attribute vec3 Vertex_position;
         attribute vec3 Vertex_normal;
-        varying vec4 baseColor;
+        varying vec3 baseNormal;
         void main() {
             gl_Position = gl_ModelViewProjectionMatrix * vec4(
                 Vertex_position, 1.0
             );
-            vec3 EC_Light_location = gl_NormalMatrix * Light_location;
-            float diffuse_weight = phong_weightCalc(
-                normalize(EC_Light_location),
-                normalize(gl_NormalMatrix * Vertex_normal)
-            );
-            baseColor = clamp(
-            (
-                // global component
-                (Global_ambient * Material_ambient)
-                // material's interaction with light's contribution
-                // to the ambient lighting...
-                + (Light_ambient * Material_ambient)
-                // material's interaction with the direct light from
-                // the light.
-                + (Light_diffuse * Material_diffuse * diffuse_weight)
-            ), 0.0, 1.0);
-        }""", """
-        varying vec4 baseColor;
+            baseNormal = gl_NormalMatrix * normalize(Vertex_normal);
+        }
+        """, """
+        vec2 phong_weightCalc(
+            in vec3 light_pos,  // light position
+            in vec3 half_light,  // half-way vector between light and view
+            in vec3 frag_normal,  // geometry normal
+            in float shininess
+        ) {
+            float ambientMult = max(0.0, dot(
+                frag_normal, light_pos
+            ));
+            float diffuseMult = 0.0;
+            if (ambientMult > -.05) {
+                diffuseMult = pow(max(0.0, dot(
+                    half_light, frag_normal
+                )), shininess);
+            }
+            return vec2(ambientMult, diffuseMult);
+        }
+        uniform vec4 Global_ambient;
+        uniform vec4 Light_ambient;
+        uniform vec4 Light_diffuse;
+        uniform vec4 Light_specular;
+        uniform vec3 Light_location;
+        uniform float Material_shininess;
+        uniform vec4 Material_specular;
+        uniform vec4 Material_ambient;
+        uniform vec4 Material_diffuse;
+        varying vec3 baseNormal;
         void main() {
-            gl_FragColor = baseColor;
+            // normalized eye-coordinate Light location
+            vec3 EC_Light_location = normalize(
+                gl_NormalMatrix * Light_location
+            );
+            // half-vector calculation
+            vec3 Light_half = normalize(
+                EC_Light_location - vec3(0, 0, -1)
+            );
+            vec2 weights = phong_weightCalc(
+                EC_Light_location,
+                Light_half,
+                baseNormal,
+                Material_shininess
+            );
+            gl_FragColor = clamp(
+            (
+                (Global_ambient * Material_ambient)
+                + (Light_ambient * Material_ambient)
+                + (Light_diffuse * Material_diffuse * weights.x)
+                // material's shininess is the only change here
+                + (Light_specular * Material_specular * weights.y)
+            ), 0.0, 1.0);
         }
         """)
-        self.shader.set_vertices([
-            [[-1, 0, 0], [-1, 0, 1]],
-            [[0, 0, 1],  [-1, 0, 2]],
-            [[0, 1, 1],  [-1, 0, 2]],
-            [[-1, 0, 0], [-1, 0, 1]],
-            [[0, 1, 1],  [-1, 0, 2]],
-            [[-1, 1, 0], [-1, 0, 1]],
-            [[0, 0, 1],  [-1, 0, 2]],
-            [[1, 0, 1],  [1, 0, 2]],
-            [[1, 1, 1],  [1, 0, 2]],
-            [[0, 0, 1],  [-1, 0, 2]],
-            [[1, 1, 1],  [1, 0, 2]],
-            [[0, 1, 1],  [-1, 0, 2]],
-            [[1, 0, 1],  [1, 0, 2]],
-            [[2, 0, 0],  [1, 0, 1]],
-            [[2, 1, 0],  [1, 0, 1]],
-            [[1, 0, 1],  [1, 0, 2]],
-            [[2, 1, 0],  [1, 0, 1]],
-            [[1, 1, 1],  [1, 0, 2]],
-        ])
+        coords, indices = Sphere(
+            radius=1
+        ).compileArrays()
+        pos = coords[:, 0:3]
+        norm = coords[:, 5:8]
+        vertices = list(zip(pos, norm))
+        self.shader.set_vertices(vertices, indices)
 
     def Render(self, mode=0):
         """Render the geometry for the scene."""
         super().Render(mode)
         with self.shader:
-            self.shader.setuniform('Global_ambient', [.3, .05, .05, .1])
-            self.shader.setuniform('Light_ambient', [.2, .2, .2, 1.0])
-            self.shader.setuniform('Light_diffuse', [1, 1, 1, 1])
-            self.shader.setuniform('Light_location', [2, 2, 10])
-            self.shader.setuniform('Material_ambient', [.2, .2, .2, 1.0])
-            self.shader.setuniform('Material_diffuse', [1, 1, 1, 1])
+            self.shader.setuniform('Global_ambient', [.05, .05, .05, .1])
+            self.shader.setuniform('Light_ambient', [.1, .1, .1, 1.0])
+            self.shader.setuniform('Light_diffuse', [.25, .25, .25, 1])
+            self.shader.setuniform('Light_specular', [1.0, 1.0, 0, 1])
+            self.shader.setuniform('Light_location', [6, 2, 4])
+            self.shader.setuniform('Material_ambient', [.1, .1, .1, 1.0])
+            self.shader.setuniform('Material_diffuse', [.15, .15, .15, 1])
+            self.shader.setuniform('Material_specular', [1.0, 1.0, 1.0, 1.0])
+            self.shader.setuniform('Material_shininess', [.95])
             self.shader.draw()
 
 
