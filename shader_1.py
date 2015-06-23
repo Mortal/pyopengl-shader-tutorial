@@ -219,13 +219,6 @@ class TestContext(BaseContext):
             [1, 0, 2],
         ])
 
-        self.tween_fraction = 0.0
-
-        self.time = Timer(duration=2.0, repeating=1)
-        self.time.addEventHandler("fraction", self.OnTimerFraction)
-        self.time.register(self)
-        self.time.start()
-
     def Render(self, mode=0):
         """Render the geometry for the scene."""
         super().Render(mode)
@@ -237,14 +230,6 @@ class TestContext(BaseContext):
             self.shader.setuniform('Material_ambient', [.2, .2, .2, 1.0])
             self.shader.setuniform('Material_diffuse', [1, 1, 1, 1])
             G.glDrawArrays(G.GL_TRIANGLES, 0, self.n)
-
-    def OnTimerFraction(self, event):
-        frac = event.fraction()
-        if frac > .5:
-            frac = 1.0-frac
-        frac *= 2
-        self.tween_fraction = frac
-        self.triggerRedraw()
 
 
 if __name__ == "__main__":
