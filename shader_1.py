@@ -227,33 +227,31 @@ class TestContext(BaseContext):
     Demonstrates use of attribute types in GLSL
     """
     def OnInit(self):
-        self.lights = [
-            Light(
-                ambient=(.05, .05, .05, 1.0),
-                diffuse=(.1, .8, .1, 1.0),
-                specular=(0.0, .05, 0.0, 1.0),
-                position=(2.5, 3.5, 2.5, 1.0),
-                attenuation=(0.0, 1.0, 1.0, 1.0),
-                spot=(np.cos(.25), 1.0, 0.0, 1.0),
-                spotdir=(-8, -20, -8.0, 1.0)),
-            Light(
-                ambient=(.05, .05, .05, 1.0),
-                diffuse=(.8, .1, .1, 1.0),
-                specular=(.25, 0.0, 0.0, 1.0),
-                position=(-2.5, 2.5, 2.5, 1.0),
-                attenuation=(0.0, 0.0, .125, 1.0),
-                spot=(np.cos(.25), 1.25, 0.0, 1.0),
-                spotdir=(2.5, -5.5, -2.5, 1.0)),
-            Light(
-                ambient=(.05, .05, .05, 1.0),
-                diffuse=(.1, .1, 1.0, 1.0),
-                specular=(0.0, .25, .25, 1.0),
-                position=(0.0, -3.06, 3.06, 1.0),
-                attenuation=(2.0, 0.0, 0.0, 1.0),
-                spot=(np.cos(.15), .75, 0.0, 1.0),
-                spotdir=(0.0, 3.06, -3.06, 1.0)),
+        light_nodes = [
+            N.DirectionalLight(
+                color=(0, 1, .1),
+                intensity=1.0,
+                ambientIntensity=0.1,
+                direction=(-.4, -1, -.4),
+            ),
+            N.SpotLight(
+                location=(-2.5, 2.5, 2.5),
+                color=(1, 0, .3),
+                ambientIntensity=.1,
+                attenuation=(0, 0, 1),
+                beamWidth=np.pi/2,
+                cutOffAngle=np.pi*.9,
+                direction=(2.5, -5.5, -2.5),
+                intensity=.5,
+            ),
+            N.PointLight(
+                location=(0, -3.06, 3.06),
+                color=(.05, .05, 1),
+                intensity=.5,
+                ambientIntensity=.1,
+            ),
         ]
-
+        self.lights = [self.light_node_as_struct(l) for l in light_nodes]
         for l in self.lights:
             print('Light(')
             for k in Light._fields:
