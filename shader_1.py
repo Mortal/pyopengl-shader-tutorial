@@ -117,7 +117,11 @@ class Shader(object):
         self._vbo_data[:, o:o+m] = values
 
     def setuniform(self, name, value):
-        G.glUniform1f(self._locs[name], value)
+        value = np.asarray(value, dtype=np.float32)
+        a = self._vars[name]
+        # Either glUniform1f, glUniform3f or glUniform4f
+        fname = 'glUniform%df' % a.type.n
+        getattr(G, fname)(self._locs[name], *value)
 
 
 class TestContext(BaseContext):
