@@ -99,7 +99,12 @@ class Shader(object):
 
     def add(self, *args, **kwargs):
         for i, arg in enumerate(args):
-            a = self._attrs[i]  # Raise IndexError if too many args
+            try:
+                a = self._attrs[i]
+            except IndexError:
+                raise ValueError(
+                    "Supplied %d args, but attrs are: %s" %
+                    (len(args), ', '.join(a.name for a in self._attrs)))
             if a.name in kwargs:
                 raise ValueError("Multiply specified: %s" % a.name)
             kwargs[a.name] = arg
