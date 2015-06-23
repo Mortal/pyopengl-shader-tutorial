@@ -217,6 +217,11 @@ class TestContext(BaseContext):
                 spotdir=(0.0, 3.06, -3.06, 1.0)),
         ]
 
+        for l in self.lights:
+            for k in Light._fields:
+                print('%s=[%s]' %
+                      (k, ', '.join('%g' % v for v in getattr(l, k))))
+            print('')
         shader_common = """
         const int nlights = %(nlights)s;
         uniform vec4 lights_position[nlights];
