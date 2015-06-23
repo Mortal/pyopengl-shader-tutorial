@@ -43,24 +43,35 @@ DECL = re.compile(r'''
 
 class Shader(object):
     @staticmethod
-    def compile_shader(source, kind):
-        try:
-            shader = shaders.compileShader(source, kind)
-        except (G.GLError, RuntimeError) as err:
-            print("Shader compilation failed\n%s\n%s" %
-                  (err, textwrap.dedent(source.strip())))
+    def compile_shader(source, shaderType):
+        source = source.encode()
+        shader = G.glCreateShader(shaderType)
+        G.glShaderSource(shader, source)
+        G.glCompileShader(shader)
+        result = G.glGetShaderiv(shader, G.GL_COMPILE_STATUS)
+        if not result:
+            print("Shader compilation failed\n%s\n%s\n%s" %
+                  (result, G.glGetShaderInfoLog(shader).decode(),
+                   textwrap.dedent(source.strip())))
             raise SystemExit()
         return shader
 
     @classmethod
     def compile(cls, vertex_source, fragment_source):
         self = cls()
-        self._shader = shaders.compileProgram(
-            Shader.compile_shader(vertex_source, G.GL_VERTEX_SHADER),
-            Shader.compile_shader(fragment_source, G.GL_FRAGMENT_SHADER))
         self._vars = {}
         self._attrs = []
         self._locs = {}
+        self._vertices = []
+
+        self._shader = shaders.ShaderProgram(G.glCreateProgram())
+        vertex_shader = Shader.compile_shader(
+            vertex_source, G.GL_VERTEX_SHADER)
+        fragment_shader = Shader.compile_shader(
+            fragment_source, G.GL_FRAGMENT_SHADER)
+        G.glAttachShader(self._shader, vertex_shader)
+        G.glAttachShader(self._shader, fragment_shader)
+
         all_source = '%s\n%s' % (vertex_source, fragment_source)
         for line in all_source.splitlines():
             o = DECL.match(line.strip())
@@ -70,7 +81,11 @@ class Shader(object):
                 self._vars[v.name] = v
                 if v.qual == 'attribute':
                     self._attrs.append(v)
-        self._vertices = []
+        G.glLinkProgram(self._shader)
+        self._shader.check_validate()
+        self._shader.check_linked()
+        G.glDeleteShader(vertex_shader)
+        G.glDeleteShader(fragment_shader)
 
         return self
 
