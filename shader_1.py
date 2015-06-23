@@ -9,7 +9,7 @@ from OpenGLContext import testingcontext
 from OpenGL import GL as G
 from OpenGL.arrays import vbo
 from OpenGL.GL import shaders
-from OpenGLContext.scenegraph.basenodes import Sphere
+from OpenGLContext.scenegraph import basenodes as N
 
 BaseContext = testingcontext.getInteractive()
 
@@ -425,7 +425,7 @@ class TestContext(BaseContext):
             gl_FragColor = fragColor;
         }
         """)
-        coords, indices = Sphere(
+        coords, indices = N.Sphere(
             radius=1
         ).compileArrays()
         pos = coords[:, 0:3]
