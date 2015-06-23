@@ -248,10 +248,6 @@ class TestContext(BaseContext):
         varying vec3 baseNormal;
         void main() {
             vec4 fragColor = Global_ambient * material_ambient;
-            int AMBIENT = 0;
-            int DIFFUSE = 1;
-            int SPECULAR = 2;
-            int POSITION = 3;
             int i;
             for (i=0;i<nlights;i+=1) {
                 // normalized eye-coordinate Light location
