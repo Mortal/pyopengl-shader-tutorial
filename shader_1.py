@@ -64,23 +64,9 @@ class Shader(object):
                 self._vars[v.name] = v
                 if v.qual == 'attribute':
                     self._attrs.append(v)
+        self._vertices = []
 
         return self
-
-    def init_vbo(self, n):
-        self._vbo_data = np.zeros((n, sum(a.type.n for a in self._attrs)),
-                                  dtype=np.float32)
-        self._vbo_stride = self._vbo_data.strides[0]
-        self._vbo = vbo.VBO(self._vbo_data)
-        for a in self._vars.values():
-            if a.qual == 'uniform':
-                self._locs[a.name] = G.glGetUniformLocation(
-                    self._shader, a.name)
-            elif a.qual == 'attribute':
-                self._locs[a.name] = G.glGetAttribLocation(
-                    self._shader, a.name)
-            elif a.qual == 'varying':
-                pass
 
     def __enter__(self):
         shaders.glUseProgram(self._shader)
@@ -108,19 +94,48 @@ class Shader(object):
             finally:
                 shaders.glUseProgram(0)
 
-    def setattr(self, name, values):
-        values = np.asarray(values, dtype=np.float32)
-        n, m = values.shape
-        if n != self._vbo_data.shape[0]:
-            raise ValueError("Wrong row count for %s: Got %s, expected %s" %
-                             (name, n, self._vbo_data.shape[0]))
+    def add(self, *args, **kwargs):
+        for i, arg in enumerate(args):
+            a = self._attrs[i]  # Raise IndexError if too many args
+            if a.name in kwargs:
+                raise ValueError("Multiply specified: %s" % a.name)
+            kwargs[a.name] = arg
 
-        i = next(i for i, a in enumerate(self._attrs) if a.name == name)
-        o = sum(a.type.n for a in self._attrs[:i])
-        if m != self._attrs[i].type.n:
-            raise ValueError("Wrong column count for %s: Got %s, expected %s" %
-                             (name, m, self._attrs[i].type.n))
-        self._vbo_data[:, o:o+m] = values
+        attrs = set(a.name for a in self._attrs)
+        values = {}
+        for k, v in kwargs.items():
+            attrs.remove(k)
+            a = self._vars[k]
+            v = np.asarray(v, dtype=a.type.dtype)
+            if len(v) != a.type.n:
+                raise ValueError(
+                    "Attribute %s has wrong length: Got %s, expected %s" %
+                    (k, len(v), a.type.n))
+            values[k] = v
+        if attrs:
+            raise ValueError("Missing attribute(s): %r" % (attrs,))
+        vertex = np.asarray([values[a.name] for a in self._attrs]).ravel()
+        self._vertices.append(vertex)
+
+    def init_vbo(self):
+        self._vbo_data = np.asarray(self._vertices)
+        self._vbo_stride = self._vbo_data.strides[0]
+        self._vbo = vbo.VBO(self._vbo_data)
+        for a in self._vars.values():
+            if a.qual == 'uniform':
+                self._locs[a.name] = G.glGetUniformLocation(
+                    self._shader, a.name)
+            elif a.qual == 'attribute':
+                self._locs[a.name] = G.glGetAttribLocation(
+                    self._shader, a.name)
+            elif a.qual == 'varying':
+                pass
+
+    def set_vertices(self, vertices):
+        self._vertices = []
+        for v in vertices:
+            self.add(*v)
+        self.init_vbo()
 
     def setuniform(self, name, value):
         a = self._vars[name]
@@ -135,6 +150,9 @@ class Shader(object):
         # Either glUniform1fv, glUniform3fv or glUniform4fv
         fname = 'glUniform%d%sv' % (a.type.n, a.type.suffix)
         getattr(G, fname)(self._locs[name], len(value), value)
+
+    def draw(self):
+        G.glDrawArrays(G.GL_TRIANGLES, 0, len(self._vertices))
 
 
 class TestContext(BaseContext):
@@ -189,47 +207,25 @@ class TestContext(BaseContext):
             gl_FragColor = baseColor;
         }
         """)
-        self.n = 18
-        self.shader.init_vbo(self.n)
-        self.shader.setattr('Vertex_position', [
-            [-1, 0, 0],
-            [0, 0, 1],
-            [0, 1, 1],
-            [-1, 0, 0],
-            [0, 1, 1],
-            [-1, 1, 0],
-            [0, 0, 1],
-            [1, 0, 1],
-            [1, 1, 1],
-            [0, 0, 1],
-            [1, 1, 1],
-            [0, 1, 1],
-            [1, 0, 1],
-            [2, 0, 0],
-            [2, 1, 0],
-            [1, 0, 1],
-            [2, 1, 0],
-            [1, 1, 1],
-        ])
-        self.shader.setattr('Vertex_normal', [
-            [-1, 0, 1],
-            [-1, 0, 2],
-            [-1, 0, 2],
-            [-1, 0, 1],
-            [-1, 0, 2],
-            [-1, 0, 1],
-            [-1, 0, 2],
-            [1, 0, 2],
-            [1, 0, 2],
-            [-1, 0, 2],
-            [1, 0, 2],
-            [-1, 0, 2],
-            [1, 0, 2],
-            [1, 0, 1],
-            [1, 0, 1],
-            [1, 0, 2],
-            [1, 0, 1],
-            [1, 0, 2],
+        self.shader.set_vertices([
+            [[-1, 0, 0], [-1, 0, 1]],
+            [[0, 0, 1],  [-1, 0, 2]],
+            [[0, 1, 1],  [-1, 0, 2]],
+            [[-1, 0, 0], [-1, 0, 1]],
+            [[0, 1, 1],  [-1, 0, 2]],
+            [[-1, 1, 0], [-1, 0, 1]],
+            [[0, 0, 1],  [-1, 0, 2]],
+            [[1, 0, 1],  [1, 0, 2]],
+            [[1, 1, 1],  [1, 0, 2]],
+            [[0, 0, 1],  [-1, 0, 2]],
+            [[1, 1, 1],  [1, 0, 2]],
+            [[0, 1, 1],  [-1, 0, 2]],
+            [[1, 0, 1],  [1, 0, 2]],
+            [[2, 0, 0],  [1, 0, 1]],
+            [[2, 1, 0],  [1, 0, 1]],
+            [[1, 0, 1],  [1, 0, 2]],
+            [[2, 1, 0],  [1, 0, 1]],
+            [[1, 1, 1],  [1, 0, 2]],
         ])
 
     def Render(self, mode=0):
@@ -242,7 +238,7 @@ class TestContext(BaseContext):
             self.shader.setuniform('Light_location', [2, 2, 10])
             self.shader.setuniform('Material_ambient', [.2, .2, .2, 1.0])
             self.shader.setuniform('Material_diffuse', [1, 1, 1, 1])
-            G.glDrawArrays(G.GL_TRIANGLES, 0, self.n)
+            self.shader.draw()
 
 
 if __name__ == "__main__":
