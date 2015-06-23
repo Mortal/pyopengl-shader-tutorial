@@ -1,4 +1,4 @@
-# From http://pyopengl.sourceforge.net/context/tutorials/shader_9.html
+# From http://pyopengl.sourceforge.net/context/tutorials/shader_10.html
 import re
 import textwrap
 import collections
@@ -15,7 +15,7 @@ BaseContext = testingcontext.getInteractive()
 
 
 Light = collections.namedtuple(
-    'Light', 'ambient diffuse specular position attenuation')
+    'Light', 'ambient diffuse specular position attenuation spot spotdir')
 ShaderVar = collections.namedtuple('ShaderVar', 'name qual type')
 ShaderType = collections.namedtuple('ShaderType', 'name n suffix dtype')
 
@@ -190,26 +190,31 @@ class TestContext(BaseContext):
     Demonstrates use of attribute types in GLSL
     """
     def OnInit(self):
-
         self.lights = [
             Light(
                 ambient=(.05, .05, .05, 1.0),
                 diffuse=(.1, .8, .1, 1.0),
-                specular=(0.0, 1.0, 0.0, 1.0),
-                position=(2.5, 2.5, 2.5, 1.0),
-                attenuation=(0.0, .15, 0.0, 1.0)),
+                specular=(0.0, .05, 0.0, 1.0),
+                position=(2.5, 3.5, 2.5, 1.0),
+                attenuation=(0.0, 1.0, 1.0, 1.0),
+                spot=(np.cos(.25), 1.0, 0.0, 1.0),
+                spotdir=(-8, -20, -8.0, 1.0)),
             Light(
                 ambient=(.05, .05, .05, 1.0),
                 diffuse=(.8, .1, .1, 1.0),
-                specular=(1.0, 0.0, 0.0, 1.0),
+                specular=(.25, 0.0, 0.0, 1.0),
                 position=(-2.5, 2.5, 2.5, 1.0),
-                attenuation=(0.0, 0.0, .15, 1.0)),
+                attenuation=(0.0, 0.0, .125, 1.0),
+                spot=(np.cos(.25), 1.25, 0.0, 1.0),
+                spotdir=(2.5, -5.5, -2.5, 1.0)),
             Light(
                 ambient=(.05, .05, .05, 1.0),
-                diffuse=(.1, .1, .8, 1.0),
-                specular=(0.0, 0.0, 1.0, 1.0),
+                diffuse=(.1, .1, 1.0, 1.0),
+                specular=(0.0, .25, .25, 1.0),
                 position=(0.0, -3.06, 3.06, 1.0),
-                attenuation=(.15, 0.0, 0.0, 1.0)),
+                attenuation=(2.0, 0.0, 0.0, 1.0),
+                spot=(np.cos(.15), .75, 0.0, 1.0),
+                spotdir=(0.0, 3.06, -3.06, 1.0)),
         ]
 
         shader_common = """
@@ -219,6 +224,9 @@ class TestContext(BaseContext):
         uniform vec4 lights_diffuse[nlights];
         uniform vec4 lights_specular[nlights];
         uniform vec4 lights_attenuation[nlights];
+        // [ cos_spot_cutoff, spot_exponent, ignored, is_spot ]
+        uniform vec4 lights_spot[nlights];
+        uniform vec4 lights_spotdir[nlights];
         varying vec3 EC_Light_half[nlights];
         varying vec3 EC_Light_location[nlights];
         varying float Light_distance[nlights];
@@ -227,12 +235,14 @@ class TestContext(BaseContext):
 
         phong_weightCalc = """
         vec3 phong_weightCalc(
-            in vec3 light_pos,  // light position/direction
-            in vec3 half_light,  // half-way vector between light and view
-            in vec3 frag_normal,  // geometry normal
-            in float shininess,  // shininess exponent
-            in float distance,  // distance for attenuation calculation
-            in vec4 attenuations  // attenuation parameters
+            in vec3 light_pos, // light position/direction
+            in vec3 half_light, // half-way vector between light and view
+            in vec3 frag_normal, // geometry normal
+            in float shininess, // shininess exponent
+            in float distance, // distance for attenuation calculation...
+            in vec4 attenuations, // attenuation parameters...
+            in vec4 spot_params, // spot control parameters...
+            in vec4 spot_direction // model-space direction
         ) {
             // returns vec3( ambientMult, diffuseMult, specularMult )
             float n_dot_pos = max( 0.0, dot(
@@ -241,6 +251,27 @@ class TestContext(BaseContext):
             float n_dot_half = 0.0;
             float attenuation = 1.0;
             if (n_dot_pos > -.05) {
+                float spot_effect = 1.0;
+                if (spot_params.w != 0.0) {
+                    // is a spot...
+                    float spot_cos = dot(
+                        gl_NormalMatrix * normalize(spot_direction.xyz),
+                        normalize(-light_pos)
+                    );
+                    if (spot_cos <= spot_params.x) {
+                        // is a spot, and is outside the cone-of-light...
+                        return vec3( 0.0, 0.0, 0.0 );
+                    } else {
+                        if (spot_cos == 1.0) {
+                            spot_effect = 1.0;
+                        } else {
+                            spot_effect = pow(
+                                    (1.0-spot_params.x)/(1.0-spot_cos),
+                                    spot_params.y
+                                );
+                        }
+                    }
+                }
                 n_dot_half = pow(
                     max(0.0,dot(
                         half_light, frag_normal
@@ -248,15 +279,12 @@ class TestContext(BaseContext):
                     shininess
                 );
                 if (distance != 0.0) {
-                    attenuation = clamp(
-                        0.0,
-                        1.0,
-                        1.0 / (
-                            attenuations.x +
-                            (attenuations.y * distance) +
-                            (attenuations.z * distance * distance)
-                        )
+                    float attenuation = 1.0/(
+                        attenuations.x +
+                        (attenuations.y * distance) +
+                        (attenuations.z * distance * distance)
                     );
+                    n_dot_half *= spot_effect;
                     n_dot_pos *= attenuation;
                     n_dot_half *= attenuation;
                 }
@@ -340,6 +368,7 @@ class TestContext(BaseContext):
         }
         """,
 
+
             shader_common + phong_weightCalc + """
         uniform vec4 material_ambient;
         uniform vec4 material_diffuse;
@@ -353,13 +382,15 @@ class TestContext(BaseContext):
                 vec3 weights = phong_weightCalc(
                     normalize(EC_Light_location[i]),
                     normalize(EC_Light_half[i]),
-                    baseNormal,
+                    normalize(baseNormal),
                     material_shininess,
                     // some implementations will produce negative values
                     // interpolating positive float-arrays!
                     // so we have to do an extra abs call for distance
                     abs(Light_distance[i]),
-                    lights_attenuation[i]
+                    lights_attenuation[i],
+                    lights_spot[i],
+                    lights_spotdir[i]
                 );
                 fragColor = (
                     fragColor
@@ -388,7 +419,7 @@ class TestContext(BaseContext):
                 ('material_ambient', (.2, .2, .2, 1.0)),
                 ('material_diffuse', (.5, .5, .5, 1.0)),
                 ('material_specular', (.8, .8, .8, 1.0)),
-                ('material_shininess', (.995,)),
+                ('material_shininess', (.8,)),
             ]:
                 self.shader.setuniform(name, val)
             for k in Light._fields:
