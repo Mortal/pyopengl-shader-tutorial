@@ -190,7 +190,7 @@ class Shader(object):
         value = np.asarray(value, dtype=a.type.dtype)
         # Either glUniform1f, glUniform3f or glUniform4f
         fname = 'glUniform%d%s' % (a.type.n, a.type.suffix)
-        getattr(G, fname)(self._locs[name], *value)
+        getattr(G, fname)(self._locs[name], *list(value.reshape((-1,))))
 
     def setuniforms(self, name, value):
         a = self._vars[name]
