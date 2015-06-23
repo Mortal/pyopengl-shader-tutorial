@@ -81,11 +81,14 @@ class Shader(object):
                 self._vars[v.name] = v
                 if v.qual == 'attribute':
                     self._attrs.append(v)
+
+        self.init_attribute_locs()
         G.glLinkProgram(self._shader)
         self._shader.check_validate()
         self._shader.check_linked()
         G.glDeleteShader(vertex_shader)
         G.glDeleteShader(fragment_shader)
+        self.init_uniform_locs()
 
         return self
 
@@ -157,20 +160,22 @@ class Shader(object):
                 target='GL_ELEMENT_ARRAY_BUFFER')
         else:
             self._indices_vbo = None
-        for a in self._vars.values():
-            if a.qual == 'uniform':
-                l = G.glGetUniformLocation(
-                    self._shader, a.name)
-            elif a.qual == 'attribute':
-                l = G.glGetAttribLocation(
-                    self._shader, a.name)
-            elif a.qual == 'varying':
+
+    def init_attribute_locs(self):
+        l = 0
+        for a in sorted(self._vars.values(), key=lambda a: a.name):
+            if a.qual != 'attribute':
                 continue
-            else:
-                raise ValueError(a.qual)
-            if l == -1 or l is None:
-                raise ValueError("glGet*Location returned %r for %r" %
-                                 (l, a.name))
+            G.glBindAttribLocation(self._shader, l, a.name)
+            self._locs[a.name] = l
+            l += 1
+
+    def init_uniform_locs(self):
+        l = 0
+        for a in sorted(self._vars.values(), key=lambda a: a.name):
+            if a.qual != 'uniform':
+                continue
+            l = G.glGetUniformLocation(self._shader, a.name)
             self._locs[a.name] = l
 
     def set_vertices(self, vertices, indices=None):
