@@ -56,7 +56,8 @@ class Shader(object):
         self._vars = {}
         self._attrs = []
         self._locs = {}
-        for line in vertex_source.splitlines():
+        all_source = '%s\n%s' % (vertex_source, fragment_source)
+        for line in all_source.splitlines():
             o = DECL.match(line.strip())
             if o is not None:
                 v = ShaderVar(o.group('name'), o.group('qual'),
