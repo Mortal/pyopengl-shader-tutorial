@@ -23,8 +23,10 @@ TYPES = {
     t.name: t
     for t in (
         ShaderType(name='float', n=1, suffix='f', dtype=np.float32),
+        ShaderType(name='vec2', n=2, suffix='f', dtype=np.float32),
         ShaderType(name='vec3', n=3, suffix='f', dtype=np.float32),
         ShaderType(name='vec4', n=4, suffix='f', dtype=np.float32),
+        ShaderType(name='sampler2D', n=1, suffix='i', dtype=np.int32),
     )
 }
 
