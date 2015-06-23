@@ -1,4 +1,4 @@
-# From http://pyopengl.sourceforge.net/context/tutorials/shader_6.html
+# From http://pyopengl.sourceforge.net/context/tutorials/shader_7.html
 import re
 import textwrap
 import collections
@@ -14,6 +14,7 @@ from OpenGLContext.scenegraph.basenodes import Sphere
 BaseContext = testingcontext.getInteractive()
 
 
+Light = collections.namedtuple('Light', 'ambient diffuse specular position')
 ShaderVar = collections.namedtuple('ShaderVar', 'name qual type')
 ShaderType = collections.namedtuple('ShaderType', 'name n suffix dtype')
 
@@ -138,15 +139,19 @@ class Shader(object):
             self._indices_vbo = None
         for a in self._vars.values():
             if a.qual == 'uniform':
-                self._locs[a.name] = G.glGetUniformLocation(
+                l = G.glGetUniformLocation(
                     self._shader, a.name)
             elif a.qual == 'attribute':
-                self._locs[a.name] = G.glGetAttribLocation(
+                l = G.glGetAttribLocation(
                     self._shader, a.name)
             elif a.qual == 'varying':
                 continue
             else:
                 raise ValueError(a.qual)
+            if l == -1 or l is None:
+                raise ValueError("glGet*Location returned %r for %r" %
+                                 (l, a.name))
+            self._locs[a.name] = l
 
     def set_vertices(self, vertices, indices=None):
         self._vertices = []
@@ -210,39 +215,47 @@ class TestContext(BaseContext):
             }
             return vec2(ambientMult, diffuseMult);
         }
+        uniform vec4 material_ambient;
+        uniform vec4 material_diffuse;
+        uniform vec4 material_specular;
+        uniform float material_shininess;
         uniform vec4 Global_ambient;
-        uniform vec4 Light_ambient;
-        uniform vec4 Light_diffuse;
-        uniform vec4 Light_specular;
-        uniform vec3 Light_location;
-        uniform float Material_shininess;
-        uniform vec4 Material_specular;
-        uniform vec4 Material_ambient;
-        uniform vec4 Material_diffuse;
+        const int nlights = 3;
+        uniform vec4 lights_position[nlights];
+        uniform vec4 lights_ambient[nlights];
+        uniform vec4 lights_diffuse[nlights];
+        uniform vec4 lights_specular[nlights];
         varying vec3 baseNormal;
         void main() {
-            // normalized eye-coordinate Light location
-            vec3 EC_Light_location = normalize(
-                gl_NormalMatrix * Light_location
-            );
-            // half-vector calculation
-            vec3 Light_half = normalize(
-                EC_Light_location - vec3(0, 0, -1)
-            );
-            vec2 weights = phong_weightCalc(
-                EC_Light_location,
-                Light_half,
-                baseNormal,
-                Material_shininess
-            );
-            gl_FragColor = clamp(
-            (
-                (Global_ambient * Material_ambient)
-                + (Light_ambient * Material_ambient)
-                + (Light_diffuse * Material_diffuse * weights.x)
-                // material's shininess is the only change here
-                + (Light_specular * Material_specular * weights.y)
-            ), 0.0, 1.0);
+            vec4 fragColor = Global_ambient * material_ambient;
+            int AMBIENT = 0;
+            int DIFFUSE = 1;
+            int SPECULAR = 2;
+            int POSITION = 3;
+            int i;
+            for (i=0;i<nlights;i+=1) {
+                // normalized eye-coordinate Light location
+                vec3 EC_Light_location = normalize(
+                    gl_NormalMatrix * lights_position[i].xyz
+                );
+                // half-vector calculation
+                vec3 Light_half = normalize(
+                    EC_Light_location - vec3( 0,0,-1 )
+                );
+                vec2 weights = phong_weightCalc(
+                    EC_Light_location,
+                    Light_half,
+                    baseNormal,
+                    material_shininess
+                );
+                fragColor = (
+                    fragColor
+                    + (lights_ambient[i] * material_ambient)
+                    + (lights_diffuse[i] * material_diffuse * weights.x)
+                    + (lights_specular[i] * material_specular * weights.y)
+                );
+            }
+            gl_FragColor = fragColor;
         }
         """)
         coords, indices = Sphere(
@@ -257,15 +270,34 @@ class TestContext(BaseContext):
         """Render the geometry for the scene."""
         super().Render(mode)
         with self.shader:
-            self.shader.setuniform('Global_ambient', [.05, .05, .05, .1])
-            self.shader.setuniform('Light_ambient', [.1, .1, .1, 1.0])
-            self.shader.setuniform('Light_diffuse', [.25, .25, .25, 1])
-            self.shader.setuniform('Light_specular', [1.0, 1.0, 0, 1])
-            self.shader.setuniform('Light_location', [6, 2, 4])
-            self.shader.setuniform('Material_ambient', [.1, .1, .1, 1.0])
-            self.shader.setuniform('Material_diffuse', [.15, .15, .15, 1])
-            self.shader.setuniform('Material_specular', [1.0, 1.0, 1.0, 1.0])
-            self.shader.setuniform('Material_shininess', [.95])
+            for name, val in [
+                ('Global_ambient', (.05, .05, .05, 1.0)),
+                ('material_ambient', (.2, .2, .2, 1.0)),
+                ('material_diffuse', (.5, .5, .5, 1.0)),
+                ('material_specular', (.8, .8, .8, 1.0)),
+                ('material_shininess', (.995,)),
+            ]:
+                self.shader.setuniform(name, val)
+            lights = [
+                Light(
+                    ambient=(.05, .05, .05, 1.0),
+                    diffuse=(.3, .3, .3, 1.0),
+                    specular=(1.0, 0.0, 0.0, 1.0),
+                    position=(4.0, 2.0, 10.0, 0.0)),
+                Light(
+                    ambient=(.05, .05, .05, 1.0),
+                    diffuse=(.3, .3, .3, 1.0),
+                    specular=(0.0, 1.0, 0.0, 1.0),
+                    position=(-4.0, 2.0, 10.0, 0.0)),
+                Light(
+                    ambient=(.05, .05, .05, 1.0),
+                    diffuse=(.3, .3, .3, 1.0),
+                    specular=(0.0, 0.0, 1.0, 1.0),
+                    position=(-4.0, 2.0, -10.0, 0.0)),
+            ]
+            for k in Light._fields:
+                self.shader.setuniforms(
+                    'lights_' + k, [getattr(l, k) for l in lights])
             self.shader.draw()
 
 
