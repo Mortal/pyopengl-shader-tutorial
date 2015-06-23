@@ -206,6 +206,21 @@ class Shader(object):
         else:
             G.glDrawArrays(G.GL_TRIANGLES, 0, len(self._vertices))
 
+    def set_material(self, appearance, mode):
+        """Convert VRML97 appearance node to series of uniform calls"""
+        material = appearance.material
+        alpha = 1.0 - material.transparency
+
+        def as4(v):
+            return np.asarray(list(v) + [alpha])
+
+        color = as4(material.diffuseColor)
+        ambient = material.ambientIntensity * color
+        self.setuniform('material_shininess', material.shininess)
+        self.setuniform('material_ambient', ambient)
+        self.setuniform('material_diffuse', color)
+        self.setuniform('material_specular', as4(material.specularColor))
+
 
 class TestContext(BaseContext):
     """
@@ -454,6 +469,40 @@ class TestContext(BaseContext):
                 self.shader.setuniforms(
                     'lights_' + k, [getattr(l, k) for l in self.lights])
             self.shader.draw()
+
+    def light_node_as_struct(self, light):
+        """Given a single VRML97 light-node, produce light value array"""
+        if not light.on:
+            z = np.zeros(len(Light._fields), 4)
+            return Light(*z)
+        color = light.color
+
+        def as4(v, w=1.0):
+            return np.asarray(list(v) + [w])
+
+        if isinstance(light, N.DirectionalLight):
+            position = -as4(light.direction, 0)
+            attenuation = spot = spotdir = np.zeros(4)
+        else:
+            position = as4(light.location)
+            attenuation = as4(light.attenuation)
+            if isinstance(light, N.SpotLight):
+                spot = [np.cos(light.beamWidth / 4),
+                        light.cutOffAngle / light.beamWidth,
+                        0, 1.0]
+                spotdir = as4(light.direction)
+            else:
+                spot = spotdir = np.zeros(4)
+
+        return Light(
+            ambient=as4(color * light.ambientIntensity),
+            diffuse=as4(color * light.intensity),
+            specular=as4(color * light.intensity),
+            position=position,
+            attenuation=attenuation,
+            spot=spot,
+            spotdir=spotdir,
+        )
 
 
 if __name__ == "__main__":
