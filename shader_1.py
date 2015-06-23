@@ -1,4 +1,4 @@
-# From http://pyopengl.sourceforge.net/context/tutorials/shader_8.html
+# From http://pyopengl.sourceforge.net/context/tutorials/shader_9.html
 import re
 import textwrap
 import collections
@@ -14,7 +14,8 @@ from OpenGLContext.scenegraph.basenodes import Sphere
 BaseContext = testingcontext.getInteractive()
 
 
-Light = collections.namedtuple('Light', 'ambient diffuse specular position')
+Light = collections.namedtuple(
+    'Light', 'ambient diffuse specular position attenuation')
 ShaderVar = collections.namedtuple('ShaderVar', 'name qual type')
 ShaderType = collections.namedtuple('ShaderType', 'name n suffix dtype')
 
@@ -189,22 +190,26 @@ class TestContext(BaseContext):
     Demonstrates use of attribute types in GLSL
     """
     def OnInit(self):
+
         self.lights = [
             Light(
                 ambient=(.05, .05, .05, 1.0),
-                diffuse=(.3, .3, .3, 1.0),
-                specular=(1.0, 0.0, 0.0, 1.0),
-                position=(4.0, 2.0, 10.0, 0.0)),
-            Light(
-                ambient=(.05, .05, .05, 1.0),
-                diffuse=(.3, .3, .3, 1.0),
+                diffuse=(.1, .8, .1, 1.0),
                 specular=(0.0, 1.0, 0.0, 1.0),
-                position=(-4.0, 2.0, 10.0, 0.0)),
+                position=(2.5, 2.5, 2.5, 1.0),
+                attenuation=(0.0, .15, 0.0, 1.0)),
             Light(
                 ambient=(.05, .05, .05, 1.0),
-                diffuse=(.3, .3, .3, 1.0),
+                diffuse=(.8, .1, .1, 1.0),
+                specular=(1.0, 0.0, 0.0, 1.0),
+                position=(-2.5, 2.5, 2.5, 1.0),
+                attenuation=(0.0, 0.0, .15, 1.0)),
+            Light(
+                ambient=(.05, .05, .05, 1.0),
+                diffuse=(.1, .1, .8, 1.0),
                 specular=(0.0, 0.0, 1.0, 1.0),
-                position=(-4.0, 2.0, -10.0, 0.0)),
+                position=(0.0, -3.06, 3.06, 1.0),
+                attenuation=(.15, 0.0, 0.0, 1.0)),
         ]
 
         shader_common = """
@@ -213,13 +218,117 @@ class TestContext(BaseContext):
         uniform vec4 lights_ambient[nlights];
         uniform vec4 lights_diffuse[nlights];
         uniform vec4 lights_specular[nlights];
+        uniform vec4 lights_attenuation[nlights];
         varying vec3 EC_Light_half[nlights];
         varying vec3 EC_Light_location[nlights];
+        varying float Light_distance[nlights];
         varying vec3 baseNormal;
         """ % dict(nlights=len(self.lights))
 
+        phong_weightCalc = """
+        vec3 phong_weightCalc(
+            in vec3 light_pos,  // light position/direction
+            in vec3 half_light,  // half-way vector between light and view
+            in vec3 frag_normal,  // geometry normal
+            in float shininess,  // shininess exponent
+            in float distance,  // distance for attenuation calculation
+            in vec4 attenuations  // attenuation parameters
+        ) {
+            // returns vec3( ambientMult, diffuseMult, specularMult )
+            float n_dot_pos = max( 0.0, dot(
+                frag_normal, light_pos
+            ));
+            float n_dot_half = 0.0;
+            float attenuation = 1.0;
+            if (n_dot_pos > -.05) {
+                n_dot_half = pow(
+                    max(0.0,dot(
+                        half_light, frag_normal
+                    )),
+                    shininess
+                );
+                if (distance != 0.0) {
+                    attenuation = clamp(
+                        0.0,
+                        1.0,
+                        1.0 / (
+                            attenuations.x +
+                            (attenuations.y * distance) +
+                            (attenuations.z * distance * distance)
+                        )
+                    );
+                    n_dot_pos *= attenuation;
+                    n_dot_half *= attenuation;
+                }
+            }
+            return vec3( attenuation, n_dot_pos, n_dot_half);
+        }
+        """
+
+        phong_preCalc = """
+        // Vertex-shader pre-calculation for lighting...
+        void phong_preCalc(
+            in vec3 vertex_position,
+            in vec4 light_position,
+            out float light_distance,
+            out vec3 ec_light_location,
+            out vec3 ec_light_half
+        ) {
+            // This is the core setup for a phong lighting pass
+            // as a reusable fragment of code.
+            // vertex_position -- un-transformed vertex position (world-space)
+            // light_position -- un-transformed light location (direction)
+            // light_distance -- output giving world-space distance-to-light
+            // ec_light_location -- output giving loc. of light in eye coords
+            // ec_light_half -- output giving the half-vector optimization
+            if (light_position.w == 0.0) {
+                // directional rather than positional light...
+                ec_light_location = normalize(
+                    gl_NormalMatrix *
+                    light_position.xyz
+                );
+                light_distance = 0.0;
+            } else {
+                // positional light, we calculate distance in
+                // model-view space here, so we take a partial
+                // solution...
+                vec3 ms_vec = (
+                    light_position.xyz -
+                    vertex_position
+                );
+                vec3 light_direction = gl_NormalMatrix * ms_vec;
+                ec_light_location = normalize( light_direction );
+                light_distance = abs(length( ms_vec ));
+            }
+            // half-vector calculation
+            ec_light_half = normalize(
+                ec_light_location + vec3( 0,0,1 )
+            );
+        }
+        """
+
+        light_preCalc = """
+        void light_preCalc( in vec3 vertex_position ) {
+            // This function is dependent on the uniforms and
+            // varying values we've been using, it basically
+            // just iterates over the phong_lightCalc passing in
+            // the appropriate pointers...
+            vec3 light_direction;
+            for (int i = 0; i< nlights; i++ ) {
+                phong_preCalc(
+                    vertex_position,
+                    lights_position[i],
+                    // following are the values to fill in...
+                    Light_distance[i],
+                    EC_Light_location[i],
+                    EC_Light_half[i]
+                );
+            }
+        }
+        """
+
         self.shader = Shader.compile(
-            shader_common + """
+            shader_common + phong_preCalc + light_preCalc + """
         attribute vec3 Vertex_position;
         attribute vec3 Vertex_normal;
         void main() {
@@ -227,36 +336,11 @@ class TestContext(BaseContext):
                 Vertex_position, 1.0
             );
             baseNormal = gl_NormalMatrix * normalize(Vertex_normal);
-            for (int i = 0; i < nlights; i++ ) {
-                EC_Light_location[i] = normalize(
-                    gl_NormalMatrix * lights_position[i].xyz
-                );
-                // half-vector calculation
-                EC_Light_half[i] = normalize(
-                    EC_Light_location[i] - vec3(0, 0, -1)
-                );
-            }
+            light_preCalc(Vertex_position);
         }
         """,
 
-            shader_common + """
-        vec2 phong_weightCalc(
-            in vec3 light_pos,  // light position
-            in vec3 half_light,  // half-way vector between light and view
-            in vec3 frag_normal,  // geometry normal
-            in float shininess
-        ) {
-            float ambientMult = max(0.0, dot(
-                frag_normal, light_pos
-            ));
-            float diffuseMult = 0.0;
-            if (ambientMult > -.05) {
-                diffuseMult = pow(max(0.0, dot(
-                    half_light, frag_normal
-                )), shininess);
-            }
-            return vec2(ambientMult, diffuseMult);
-        }
+            shader_common + phong_weightCalc + """
         uniform vec4 material_ambient;
         uniform vec4 material_diffuse;
         uniform vec4 material_specular;
@@ -266,17 +350,22 @@ class TestContext(BaseContext):
             vec4 fragColor = Global_ambient * material_ambient;
             int i;
             for (i=0;i<nlights;i+=1) {
-                vec2 weights = phong_weightCalc(
-                    EC_Light_location[i],
-                    EC_Light_half[i],
+                vec3 weights = phong_weightCalc(
+                    normalize(EC_Light_location[i]),
+                    normalize(EC_Light_half[i]),
                     baseNormal,
-                    material_shininess
+                    material_shininess,
+                    // some implementations will produce negative values
+                    // interpolating positive float-arrays!
+                    // so we have to do an extra abs call for distance
+                    abs(Light_distance[i]),
+                    lights_attenuation[i]
                 );
                 fragColor = (
                     fragColor
-                    + (lights_ambient[i] * material_ambient)
-                    + (lights_diffuse[i] * material_diffuse * weights.x)
-                    + (lights_specular[i] * material_specular * weights.y)
+                    + (lights_ambient[i] * material_ambient * weights.x)
+                    + (lights_diffuse[i] * material_diffuse * weights.y)
+                    + (lights_specular[i] * material_specular * weights.z)
                 );
             }
             gl_FragColor = fragColor;
