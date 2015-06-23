@@ -189,6 +189,24 @@ class TestContext(BaseContext):
     Demonstrates use of attribute types in GLSL
     """
     def OnInit(self):
+        self.lights = [
+            Light(
+                ambient=(.05, .05, .05, 1.0),
+                diffuse=(.3, .3, .3, 1.0),
+                specular=(1.0, 0.0, 0.0, 1.0),
+                position=(4.0, 2.0, 10.0, 0.0)),
+            Light(
+                ambient=(.05, .05, .05, 1.0),
+                diffuse=(.3, .3, .3, 1.0),
+                specular=(0.0, 1.0, 0.0, 1.0),
+                position=(-4.0, 2.0, 10.0, 0.0)),
+            Light(
+                ambient=(.05, .05, .05, 1.0),
+                diffuse=(.3, .3, .3, 1.0),
+                specular=(0.0, 0.0, 1.0, 1.0),
+                position=(-4.0, 2.0, -10.0, 0.0)),
+        ]
+
         self.shader = Shader.compile("""
         attribute vec3 Vertex_position;
         attribute vec3 Vertex_normal;
@@ -222,7 +240,7 @@ class TestContext(BaseContext):
         uniform vec4 material_specular;
         uniform float material_shininess;
         uniform vec4 Global_ambient;
-        const int nlights = 3;
+        const int nlights = %(nlights)s;
         uniform vec4 lights_position[nlights];
         uniform vec4 lights_ambient[nlights];
         uniform vec4 lights_diffuse[nlights];
@@ -259,7 +277,7 @@ class TestContext(BaseContext):
             }
             gl_FragColor = fragColor;
         }
-        """)
+        """ % dict(nlights=len(self.lights)))
         coords, indices = Sphere(
             radius=1
         ).compileArrays()
@@ -280,26 +298,9 @@ class TestContext(BaseContext):
                 ('material_shininess', (.995,)),
             ]:
                 self.shader.setuniform(name, val)
-            lights = [
-                Light(
-                    ambient=(.05, .05, .05, 1.0),
-                    diffuse=(.3, .3, .3, 1.0),
-                    specular=(1.0, 0.0, 0.0, 1.0),
-                    position=(4.0, 2.0, 10.0, 0.0)),
-                Light(
-                    ambient=(.05, .05, .05, 1.0),
-                    diffuse=(.3, .3, .3, 1.0),
-                    specular=(0.0, 1.0, 0.0, 1.0),
-                    position=(-4.0, 2.0, 10.0, 0.0)),
-                Light(
-                    ambient=(.05, .05, .05, 1.0),
-                    diffuse=(.3, .3, .3, 1.0),
-                    specular=(0.0, 0.0, 1.0, 1.0),
-                    position=(-4.0, 2.0, -10.0, 0.0)),
-            ]
             for k in Light._fields:
                 self.shader.setuniforms(
-                    'lights_' + k, [getattr(l, k) for l in lights])
+                    'lights_' + k, [getattr(l, k) for l in self.lights])
             self.shader.draw()
 
 
