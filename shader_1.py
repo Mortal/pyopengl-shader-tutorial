@@ -72,6 +72,8 @@ class Shader(object):
     def __enter__(self):
         shaders.glUseProgram(self._shader)
         self._vbo.bind()
+        if self._indices_vbo is not None:
+            self._indices_vbo.bind()
         self._attr_enabled = []
         for a in self._attrs:
             loc = self._locs[a.name]
@@ -119,9 +121,15 @@ class Shader(object):
         self._vertices.append(vertex)
 
     def init_vbo(self):
-        self._vbo_data = np.asarray(self._vertices)
-        self._vbo_stride = self._vbo_data.strides[0]
-        self._vbo = vbo.VBO(self._vbo_data)
+        vbo_data = np.asarray(self._vertices)
+        self._vbo_stride = vbo_data.strides[0]
+        self._vbo = vbo.VBO(vbo_data)
+        if self._indices is not None:
+            self._indices_vbo = vbo.VBO(
+                np.asarray(self._indices, dtype=np.uint16),
+                target='GL_ELEMENT_ARRAY_BUFFER')
+        else:
+            self._indices_vbo = None
         for a in self._vars.values():
             if a.qual == 'uniform':
                 self._locs[a.name] = G.glGetUniformLocation(
@@ -132,10 +140,11 @@ class Shader(object):
             elif a.qual == 'varying':
                 pass
 
-    def set_vertices(self, vertices):
+    def set_vertices(self, vertices, indices=None):
         self._vertices = []
         for v in vertices:
             self.add(*v)
+        self._indices = indices
         self.init_vbo()
 
     def setuniform(self, name, value):
@@ -153,7 +162,11 @@ class Shader(object):
         getattr(G, fname)(self._locs[name], len(value), value)
 
     def draw(self):
-        G.glDrawArrays(G.GL_TRIANGLES, 0, len(self._vertices))
+        if self._indices_vbo is not None:
+            G.glDrawElements(G.GL_TRIANGLES, len(self._indices),
+                             G.GL_UNSIGNED_SHORT, self._indices_vbo)
+        else:
+            G.glDrawArrays(G.GL_TRIANGLES, 0, len(self._vertices))
 
 
 class TestContext(BaseContext):
