@@ -447,6 +447,7 @@ class TestContext(BaseContext):
             radius=1
         ).compileArrays()
         pos = coords[:, 0:3]
+        texpos = coords[:, 3:5]
         norm = coords[:, 5:8]
         vertices = list(zip(pos, norm))
         self.shader.set_vertices(vertices, indices)
