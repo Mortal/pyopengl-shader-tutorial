@@ -272,6 +272,7 @@ class TestContext(BaseContext):
         varying vec3 EC_Light_location[nlights];
         varying float Light_distance[nlights];
         varying vec3 baseNormal;
+        varying vec2 Vertex_texture_coordinate_var;
         """ % dict(nlights=len(self.lights))
 
         phong_weightCalc = """
@@ -400,15 +401,16 @@ class TestContext(BaseContext):
             shader_common + phong_preCalc + light_preCalc + """
         attribute vec3 Vertex_position;
         attribute vec3 Vertex_normal;
+        attribute vec2 Vertex_texture_coordinate;
         void main() {
             gl_Position = gl_ModelViewProjectionMatrix * vec4(
                 Vertex_position, 1.0
             );
             baseNormal = gl_NormalMatrix * normalize(Vertex_normal);
             light_preCalc(Vertex_position);
+            Vertex_texture_coordinate_var = Vertex_texture_coordinate;
         }
         """,
-
 
             shader_common + phong_weightCalc + """
         uniform vec4 material_ambient;
@@ -416,8 +418,14 @@ class TestContext(BaseContext):
         uniform vec4 material_specular;
         uniform float material_shininess;
         uniform vec4 Global_ambient;
+        uniform sampler2D diffuse_texture;
         void main() {
             vec4 fragColor = Global_ambient * material_ambient;
+            vec4 texDiffuse = texture2D(
+                diffuse_texture, Vertex_texture_coordinate_var
+            );
+            texDiffuse = mix( material_diffuse, texDiffuse, .5 );
+            //texDiffuse = material_diffuse * texDiffuse;
             int i;
             for (i=0;i<nlights;i+=1) {
                 vec3 weights = phong_weightCalc(
@@ -436,7 +444,7 @@ class TestContext(BaseContext):
                 fragColor = (
                     fragColor
                     + (lights_ambient[i] * material_ambient * weights.x)
-                    + (lights_diffuse[i] * material_diffuse * weights.y)
+                    + (lights_diffuse[i] * texDiffuse * weights.y)
                     + (lights_specular[i] * material_specular * weights.z)
                 );
             }
@@ -449,21 +457,37 @@ class TestContext(BaseContext):
         pos = coords[:, 0:3]
         texpos = coords[:, 3:5]
         norm = coords[:, 5:8]
-        vertices = list(zip(pos, norm))
+        vertices = list(zip(pos, norm, texpos))
         self.shader.set_vertices(vertices, indices)
+        self.appearance = N.Appearance(
+            material=N.Material(
+                diffuseColor=(1, 1, 1),
+                specularColor=(.25, .25, 0),
+                ambientIntensity=.1,
+                shininess=.2,
+            ),
+            texture=N.ImageTexture(
+                url=['marbleface.jpeg'],
+            ),
+        )
 
     def Render(self, mode=0):
         """Render the geometry for the scene."""
         super().Render(mode)
+        if not mode.visible:
+            return
+        G.glActiveTexture(G.GL_TEXTURE0 + 1)
+        try:
+            self.appearance.texture.render(mode.visible, mode.lighting, mode)
+        finally:
+            G.glActiveTexture(G.GL_TEXTURE0)
         with self.shader:
             for name, val in [
+                ('diffuse_texture', 1),
                 ('Global_ambient', (.05, .05, .05, 1.0)),
-                ('material_ambient', (.2, .2, .2, 1.0)),
-                ('material_diffuse', (.5, .5, .5, 1.0)),
-                ('material_specular', (.8, .8, .8, 1.0)),
-                ('material_shininess', (.8,)),
             ]:
                 self.shader.setuniform(name, val)
+            self.shader.set_material(self.appearance, mode)
             for k in Light._fields:
                 self.shader.setuniforms(
                     'lights_' + k, [getattr(l, k) for l in self.lights])
