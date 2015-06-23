@@ -95,6 +95,8 @@ class Shader(object):
                 G.glDisableVertexAttribArray(loc)
         finally:
             try:
+                if self._indices_vbo is not None:
+                    self._indices_vbo.unbind()
                 self._vbo.unbind()
             finally:
                 shaders.glUseProgram(0)
