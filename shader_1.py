@@ -1,4 +1,4 @@
-# From http://pyopengl.sourceforge.net/context/tutorials/shader_1.html
+# From http://pyopengl.sourceforge.net/context/tutorials/shader_2.html
 import textwrap
 
 from OpenGLContext import testingcontext
@@ -37,43 +37,49 @@ class TestContext(BaseContext):
     def OnInit(self):
         """Initialize the context once we have a valid OpenGL environ"""
         vertex_shader = compile_vertex_shader("""
-            #version 120
+            varying vec4 vertex_color;
             void main() {
                 gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+                vertex_color = gl_Color;
             }
         """)
         fragment_shader = compile_fragment_shader("""
-            #version 120
+            varying vec4 vertex_color;
             void main() {
-                gl_FragColor = vec4( 0, 1, 0, 1 );
+                gl_FragColor = vertex_color;
             }
         """)
         self.shader = shaders.compileProgram(vertex_shader, fragment_shader)
-        self.vbo = vbo.VBO(
+        data = \
             A.array([
-                [0,   1, 0],
-                [-1, -1, 0],
-                [1,  -1, 0],
-                [2,  -1, 0],
-                [4,  -1, 0],
-                [4,   1, 0],
-                [2,  -1, 0],
-                [4,   1, 0],
-                [2,   1, 0],
+                [0,   1, 0, 0, 1, 0],
+                [-1, -1, 0, 1, 1, 0],
+                [1,  -1, 0, 0, 1, 1],
+                [2,  -1, 0, 1, 0, 0],
+                [4,  -1, 0, 0, 1, 0],
+                [4,   1, 0, 0, 0, 1],
+                [2,  -1, 0, 1, 0, 0],
+                [4,   1, 0, 0, 0, 1],
+                [2,   1, 0, 0, 1, 1],
             ], 'f')
-        )
+        self.vbo_stride = data.strides[0]
+        self.vbo = vbo.VBO(data)
 
     def Render(self, mode):
         """Render the geometry for the scene."""
+        super().Render(mode)
         shaders.glUseProgram(self.shader)
         try:
             self.vbo.bind()
             try:
                 G.glEnableClientState(G.GL_VERTEX_ARRAY)
-                G.glVertexPointerf(self.vbo)
+                G.glEnableClientState(G.GL_COLOR_ARRAY)
+                G.glVertexPointer(3, G.GL_FLOAT, self.vbo_stride, self.vbo)
+                G.glColorPointer(3, G.GL_FLOAT, self.vbo_stride, self.vbo + 12)
                 G.glDrawArrays(G.GL_TRIANGLES, 0, 9)
             finally:
                 self.vbo.unbind()
+                G.glDisableClientState(G.GL_COLOR_ARRAY)
                 G.glDisableClientState(G.GL_VERTEX_ARRAY)
         finally:
             shaders.glUseProgram(0)
