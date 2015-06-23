@@ -129,6 +129,13 @@ class Shader(object):
         fname = 'glUniform%d%s' % (a.type.n, a.type.suffix)
         getattr(G, fname)(self._locs[name], *value)
 
+    def setuniforms(self, name, value):
+        a = self._vars[name]
+        value = np.asarray(value, dtype=a.type.dtype)
+        # Either glUniform1fv, glUniform3fv or glUniform4fv
+        fname = 'glUniform%d%sv' % (a.type.n, a.type.suffix)
+        getattr(G, fname)(self._locs[name], len(value), value)
+
 
 class TestContext(BaseContext):
     """
