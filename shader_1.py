@@ -29,12 +29,18 @@ def compile_fragment_shader(source):
     return compile_shader(source, G.GL_FRAGMENT_SHADER)
 
 
+def compile_shaders(vertex_source, fragment_source):
+    return shaders.compileProgram(
+        compile_vertex_shader(vertex_source),
+        compile_fragment_shader(fragment_source))
+
+
 class TestContext(BaseContext):
     """
     Demonstrates use of attribute types in GLSL
     """
     def OnInit(self):
-        vertex_shader = compile_vertex_shader("""
+        self.shader = compile_shaders("""
             uniform float tween;
             attribute vec3 position;
             attribute vec3 tweened;
@@ -48,14 +54,12 @@ class TestContext(BaseContext):
                 );
                 baseColor = vec4(color, 1.0);
             }
-        """)
-        fragment_shader = compile_fragment_shader("""
+        """, """
             varying vec4 baseColor;
             void main() {
                 gl_FragColor = baseColor;
             }
         """)
-        self.shader = shaders.compileProgram(vertex_shader, fragment_shader)
         self.vbo_data = \
             A.array([
                 [0,  1,  0, 1,  3,  0, 0, 1, 0],
