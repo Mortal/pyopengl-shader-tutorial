@@ -1,4 +1,4 @@
-# From http://pyopengl.sourceforge.net/context/tutorials/shader_2.html
+# From http://pyopengl.sourceforge.net/context/tutorials/shader_3.html
 import textwrap
 
 from OpenGLContext import testingcontext
@@ -30,27 +30,34 @@ def compile_fragment_shader(source):
 
 class TestContext(BaseContext):
     """
-    This shader just passes gl_Color from an input array to the fragment
-    shader, which interpolates the values across the face (via a "varying"
-    data type).
+    This shader adds a simple linear fog to the shader Shows use of uniforms,
+    and a few simple calculations within the vertex shader.
     """
     def OnInit(self):
-        """Initialize the context once we have a valid OpenGL environ"""
         vertex_shader = compile_vertex_shader("""
-            varying vec4 vertex_color;
+            uniform float end_fog;
+            uniform vec4 fog_color;
             void main() {
-                gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
-                vertex_color = gl_Color;
+                float fog; // amount of fog to apply
+                float fog_coord; // distance for fog calculation
+                // ftransform is generally faster and is guaranteed
+                // to produce the same result on each run.
+                // gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+                gl_Position = ftransform();
+                fog_coord = abs(gl_Position.z);
+                fog_coord = clamp(fog_coord, 0.0, end_fog);
+                fog = (end_fog - fog_coord)/end_fog;
+                fog = clamp(fog, 0.0, 1.0);
+                gl_FrontColor = mix(fog_color, gl_Color, fog);
             }
         """)
         fragment_shader = compile_fragment_shader("""
-            varying vec4 vertex_color;
             void main() {
-                gl_FragColor = vertex_color;
+                gl_FragColor = gl_Color;
             }
         """)
         self.shader = shaders.compileProgram(vertex_shader, fragment_shader)
-        data = \
+        self.vbo_data = \
             A.array([
                 [0,   1, 0, 0, 1, 0],
                 [-1, -1, 0, 1, 1, 0],
@@ -62,13 +69,22 @@ class TestContext(BaseContext):
                 [4,   1, 0, 0, 0, 1],
                 [2,   1, 0, 0, 1, 1],
             ], 'f')
-        self.vbo_stride = data.strides[0]
-        self.vbo = vbo.VBO(data)
+        self.vbo_stride = self.vbo_data.strides[0]
+        self.vbo = vbo.VBO(self.vbo_data)
 
-    def Render(self, mode):
+        self.uniform_locations = {
+            'end_fog': G.glGetUniformLocation(self.shader, 'end_fog'),
+            'fog_color': G.glGetUniformLocation(self.shader, 'fog_color'),
+        }
+
+    def Render(self, mode=0):
         """Render the geometry for the scene."""
         super().Render(mode)
         shaders.glUseProgram(self.shader)
+        G.glUniform1f(self.uniform_locations['end_fog'], 15)
+        G.glUniform4f(self.uniform_locations['fog_color'], 1, 1, 1, 1)
+        G.glRotate(45, 0, 1, 0)
+        G.glScale(3, 3, 3)
         try:
             self.vbo.bind()
             try:
