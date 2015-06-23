@@ -8,7 +8,6 @@ from OpenGLContext import testingcontext
 from OpenGL import GL as G
 from OpenGL.arrays import vbo
 from OpenGL.GL import shaders
-from OpenGLContext.events.timer import Timer
 
 BaseContext = testingcontext.getInteractive()
 
