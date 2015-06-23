@@ -15,6 +15,7 @@ cd $i*/
 git init . && git add . && git commit -m 'Initial commit' && 2to3 -j 4 -w -n --no-diffs . && git commit -am 2to3
 patch -p1 < ../../`basename \`pwd\``-post2to3.patch
 git commit -am Fix
+python setup.py install
 cd ../..
 done
 pip install -r requirements.txt
