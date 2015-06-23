@@ -144,7 +144,9 @@ class Shader(object):
                 self._locs[a.name] = G.glGetAttribLocation(
                     self._shader, a.name)
             elif a.qual == 'varying':
-                pass
+                continue
+            else:
+                raise ValueError(a.qual)
 
     def set_vertices(self, vertices, indices=None):
         self._vertices = []
