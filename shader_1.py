@@ -1,4 +1,5 @@
 # From http://pyopengl.sourceforge.net/context/tutorials/shader_5.html
+import re
 import textwrap
 import collections
 
@@ -12,18 +13,27 @@ from OpenGL.GL import shaders
 BaseContext = testingcontext.getInteractive()
 
 
-ShaderVar = collections.namedtuple('ShaderVar', 'name kind type')
-ShaderType = collections.namedtuple('ShaderType', 'name n')
+ShaderVar = collections.namedtuple('ShaderVar', 'name qual type')
+ShaderType = collections.namedtuple('ShaderType', 'name n suffix dtype')
 
-KINDS = ('uniform', 'attribute', 'varying')
 TYPES = {
     t.name: t
     for t in (
-        ShaderType(name='float', n=1),
-        ShaderType(name='vec3', n=3),
-        ShaderType(name='vec4', n=4),
+        ShaderType(name='float', n=1, suffix='f', dtype=np.float32),
+        ShaderType(name='vec3', n=3, suffix='f', dtype=np.float32),
+        ShaderType(name='vec4', n=4, suffix='f', dtype=np.float32),
     )
 }
+
+DECL = re.compile(r'''
+    (?P<qual>uniform|attribute|varying)\s+
+    (?P<type>%(types)s)\s+
+    (?P<name>[a-zA-Z0-9_]+)\s*
+    (?P<array>\[)?
+    ''' % {'types': '|'.join(TYPES.keys())},
+    re.X)
+
+# KINDS = ('uniform', 'attribute', 'varying')
 
 
 class Shader(object):
@@ -47,15 +57,12 @@ class Shader(object):
         self._attrs = []
         self._locs = {}
         for line in vertex_source.splitlines():
-            line = line.strip()
-            try:
-                kind, type_, name = line.strip().rstrip(';').split()
-            except ValueError:
-                continue
-            if kind in KINDS and type_ in TYPES:
-                v = ShaderVar(name, kind, TYPES[type_])
-                self._vars[name] = v
-                if v.kind == 'attribute':
+            o = DECL.match(line.strip())
+            if o is not None:
+                v = ShaderVar(o.group('name'), o.group('qual'),
+                              TYPES[o.group('type')])
+                self._vars[v.name] = v
+                if v.qual == 'attribute':
                     self._attrs.append(v)
 
         return self
@@ -66,13 +73,13 @@ class Shader(object):
         self._vbo_stride = self._vbo_data.strides[0]
         self._vbo = vbo.VBO(self._vbo_data)
         for a in self._vars.values():
-            if a.kind == 'uniform':
+            if a.qual == 'uniform':
                 self._locs[a.name] = G.glGetUniformLocation(
                     self._shader, a.name)
-            elif a.kind == 'attribute':
+            elif a.qual == 'attribute':
                 self._locs[a.name] = G.glGetAttribLocation(
                     self._shader, a.name)
-            elif a.kind == 'varying':
+            elif a.qual == 'varying':
                 pass
 
     def __enter__(self):
@@ -116,10 +123,10 @@ class Shader(object):
         self._vbo_data[:, o:o+m] = values
 
     def setuniform(self, name, value):
-        value = np.asarray(value, dtype=np.float32)
         a = self._vars[name]
+        value = np.asarray(value, dtype=a.type.dtype)
         # Either glUniform1f, glUniform3f or glUniform4f
-        fname = 'glUniform%df' % a.type.n
+        fname = 'glUniform%d%s' % (a.type.n, a.type.suffix)
         getattr(G, fname)(self._locs[name], *value)
 
 
