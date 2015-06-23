@@ -1,4 +1,4 @@
-# From http://pyopengl.sourceforge.net/context/tutorials/shader_4.html
+# From http://pyopengl.sourceforge.net/context/tutorials/shader_5.html
 import textwrap
 import collections
 
@@ -130,58 +130,93 @@ class TestContext(BaseContext):
     """
     def OnInit(self):
         self.shader = Shader.compile("""
-            uniform float tween;
-            attribute vec3 position;
-            attribute vec3 tweened;
-            attribute vec3 color;
-            varying vec4 baseColor;
-            void main() {
-                gl_Position = gl_ModelViewProjectionMatrix * mix(
-                    vec4(position, 1.0),
-                    vec4(tweened, 1.0),
-                    tween
-                );
-                baseColor = vec4(color, 1.0);
-            }
-        """, """
-            varying vec4 baseColor;
-            void main() {
-                gl_FragColor = baseColor;
-            }
+        float phong_weightCalc(
+            in vec3 light_pos, // light position
+            in vec3 frag_normal // geometry normal
+        ) {
+            // returns vec2( ambientMult, diffuseMult )
+            float n_dot_pos = max( 0.0, dot(
+                frag_normal, light_pos
+            ));
+            return n_dot_pos;
+        }
+
+        uniform vec4 Global_ambient;
+        uniform vec4 Light_ambient;
+        uniform vec4 Light_diffuse;
+        uniform vec3 Light_location;
+        uniform vec4 Material_ambient;
+        uniform vec4 Material_diffuse;
+        attribute vec3 Vertex_position;
+        attribute vec3 Vertex_normal;
+        varying vec4 baseColor;
+        void main() {
+            gl_Position = gl_ModelViewProjectionMatrix * vec4(
+                Vertex_position, 1.0
+            );
+            vec3 EC_Light_location = gl_NormalMatrix * Light_location;
+            float diffuse_weight = phong_weightCalc(
+                normalize(EC_Light_location),
+                normalize(gl_NormalMatrix * Vertex_normal)
+            );
+            baseColor = clamp(
+            (
+                // global component
+                (Global_ambient * Material_ambient)
+                // material's interaction with light's contribution
+                // to the ambient lighting...
+                + (Light_ambient * Material_ambient)
+                // material's interaction with the direct light from
+                // the light.
+                + (Light_diffuse * Material_diffuse * diffuse_weight)
+            ), 0.0, 1.0);
+        }""", """
+        varying vec4 baseColor;
+        void main() {
+            gl_FragColor = baseColor;
+        }
         """)
-        self.shader.init_vbo(9)
-        self.shader.setattr('position', [
-            [0,  1,  0],
-            [-1, -1, 0],
-            [1,  -1, 0],
-            [2,  -1, 0],
-            [4,  -1, 0],
-            [4,  1,  0],
-            [2,  -1, 0],
-            [4,  1,  0],
-            [2,  1,  0],
-        ])
-        self.shader.setattr('tweened', [
-            [1,  3,  0],
-            [-1, -1, 0],
-            [1,  -1, 0],
-            [2,  -1, 0],
-            [4,  -1, 0],
-            [4,  9,  0],
-            [2,  -1, 0],
-            [1,  3,  0],
-            [1,  -1, 0],
-        ])
-        self.shader.setattr('color', [
-            [0, 1, 0],
-            [1, 1, 0],
-            [0, 1, 1],
-            [1, 0, 0],
-            [0, 1, 0],
-            [0, 0, 1],
-            [1, 0, 0],
+        self.n = 18
+        self.shader.init_vbo(self.n)
+        self.shader.setattr('Vertex_position', [
+            [-1, 0, 0],
             [0, 0, 1],
             [0, 1, 1],
+            [-1, 0, 0],
+            [0, 1, 1],
+            [-1, 1, 0],
+            [0, 0, 1],
+            [1, 0, 1],
+            [1, 1, 1],
+            [0, 0, 1],
+            [1, 1, 1],
+            [0, 1, 1],
+            [1, 0, 1],
+            [2, 0, 0],
+            [2, 1, 0],
+            [1, 0, 1],
+            [2, 1, 0],
+            [1, 1, 1],
+        ])
+        self.shader.setattr('Vertex_normal', [
+            [-1, 0, 1],
+            [-1, 0, 2],
+            [-1, 0, 2],
+            [-1, 0, 1],
+            [-1, 0, 2],
+            [-1, 0, 1],
+            [-1, 0, 2],
+            [1, 0, 2],
+            [1, 0, 2],
+            [-1, 0, 2],
+            [1, 0, 2],
+            [-1, 0, 2],
+            [1, 0, 2],
+            [1, 0, 1],
+            [1, 0, 1],
+            [1, 0, 2],
+            [1, 0, 1],
+            [1, 0, 2],
         ])
 
         self.tween_fraction = 0.0
@@ -195,8 +230,13 @@ class TestContext(BaseContext):
         """Render the geometry for the scene."""
         super().Render(mode)
         with self.shader:
-            self.shader.setuniform('tween', self.tween_fraction)
-            G.glDrawArrays(G.GL_TRIANGLES, 0, 9)
+            self.shader.setuniform('Global_ambient', [.3, .05, .05, .1])
+            self.shader.setuniform('Light_ambient', [.2, .2, .2, 1.0])
+            self.shader.setuniform('Light_diffuse', [1, 1, 1, 1])
+            self.shader.setuniform('Light_location', [2, 2, 10])
+            self.shader.setuniform('Material_ambient', [.2, .2, .2, 1.0])
+            self.shader.setuniform('Material_diffuse', [1, 1, 1, 1])
+            G.glDrawArrays(G.GL_TRIANGLES, 0, self.n)
 
     def OnTimerFraction(self, event):
         frac = event.fraction()
