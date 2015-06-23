@@ -1,0 +1,11 @@
+colorama==0.3.3
+numpy==1.9.2
+OpenGLContext==2.3.0b1
+OpenGLContext-qt==1.0.0a3
+Pillow==2.8.2
+PyDispatcher==2.0.5
+PyOpenGL==3.1.0
+PyOpenGL-accelerate==3.1.0
+PyVRML97==2.3.0b1
+PyVRML97-accelerate==2.3.0b1
+six==1.9.0

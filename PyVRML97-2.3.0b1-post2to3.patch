@@ -1,0 +1,26 @@
+diff --git a/PyVRML97.egg-info/SOURCES.txt b/PyVRML97.egg-info/SOURCES.txt
+index baa33fa..4d9e607 100644
+--- a/PyVRML97.egg-info/SOURCES.txt
++++ b/PyVRML97.egg-info/SOURCES.txt
+@@ -1,6 +1,7 @@
+ MANIFEST.in
+ README.txt
+ license.txt
++setup.cfg
+ setup.py
+ PyVRML97.egg-info/PKG-INFO
+ PyVRML97.egg-info/SOURCES.txt
+diff --git a/vrml/fieldtypes.py b/vrml/fieldtypes.py
+index 03c819b..1bc31b9 100644
+--- a/vrml/fieldtypes.py
++++ b/vrml/fieldtypes.py
+@@ -11,8 +11,7 @@ We use Numeric Python arrays whereever possible.
+ import operator
+ from vrml import protonamespace, field, csscolors, arrays
+ 
+-import types, sys
+-from types import ListType, TupleType
++import sys
+ from functools import reduce
+ 
+ DOUBLE_TYPE = arrays.typeCode( arrays.array( [0],'d') )
