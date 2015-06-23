@@ -252,12 +252,6 @@ class TestContext(BaseContext):
             ),
         ]
         self.lights = [self.light_node_as_struct(l) for l in light_nodes]
-        for l in self.lights:
-            print('Light(')
-            for k in Light._fields:
-                print('    %s=[%s],' %
-                      (k, ', '.join('%g' % v for v in getattr(l, k))))
-            print('),')
         shader_common = """
         const int nlights = %(nlights)s;
         uniform vec4 lights_position[nlights];
@@ -443,13 +437,31 @@ class TestContext(BaseContext):
             gl_FragColor = fragColor;
         }
         """)
-        coords, indices = N.Sphere(
-            radius=1
-        ).compileArrays()
-        pos = coords[:, 0:3]
-        texpos = coords[:, 3:5]
-        norm = coords[:, 5:8]
-        vertices = list(zip(pos, norm))
+
+        self.set_terrain_vertices()
+
+    def set_terrain_vertices(self):
+        heights = np.asarray([
+            [5, 3, 2, 1],
+            [3, 2, 1, 0],
+            [2, 1, 0.5, 0],
+        ])
+        vertices = []
+        indices = []
+        for y, row in enumerate(heights):
+            for x, z in enumerate(row):
+                norm = [0, 0, 1]
+                nw, ne, sw, se = range(len(vertices), len(vertices) + 4)
+                vertices += [
+                    [[x, y, z], norm],
+                    [[x + 1, y, z], norm],
+                    [[x, y + 1, z], norm],
+                    [[x + 1, y + 1, z], norm],
+                ]
+                indices += [
+                    nw, ne, sw,
+                    sw, ne, se,
+                ]
         self.shader.set_vertices(vertices, indices)
 
     def Render(self, mode=0):
