@@ -1,4 +1,4 @@
-# From http://pyopengl.sourceforge.net/context/tutorials/shader_7.html
+# From http://pyopengl.sourceforge.net/context/tutorials/shader_8.html
 import re
 import textwrap
 import collections
@@ -207,17 +207,39 @@ class TestContext(BaseContext):
                 position=(-4.0, 2.0, -10.0, 0.0)),
         ]
 
-        self.shader = Shader.compile("""
+        shader_common = """
+        const int nlights = %(nlights)s;
+        uniform vec4 lights_position[nlights];
+        uniform vec4 lights_ambient[nlights];
+        uniform vec4 lights_diffuse[nlights];
+        uniform vec4 lights_specular[nlights];
+        varying vec3 EC_Light_half[nlights];
+        varying vec3 EC_Light_location[nlights];
+        varying vec3 baseNormal;
+        """ % dict(nlights=len(self.lights))
+
+        self.shader = Shader.compile(
+            shader_common + """
         attribute vec3 Vertex_position;
         attribute vec3 Vertex_normal;
-        varying vec3 baseNormal;
         void main() {
             gl_Position = gl_ModelViewProjectionMatrix * vec4(
                 Vertex_position, 1.0
             );
             baseNormal = gl_NormalMatrix * normalize(Vertex_normal);
+            for (int i = 0; i < nlights; i++ ) {
+                EC_Light_location[i] = normalize(
+                    gl_NormalMatrix * lights_position[i].xyz
+                );
+                // half-vector calculation
+                EC_Light_half[i] = normalize(
+                    EC_Light_location[i] - vec3(0, 0, -1)
+                );
+            }
         }
-        """, """
+        """,
+
+            shader_common + """
         vec2 phong_weightCalc(
             in vec3 light_pos,  // light position
             in vec3 half_light,  // half-way vector between light and view
@@ -240,27 +262,13 @@ class TestContext(BaseContext):
         uniform vec4 material_specular;
         uniform float material_shininess;
         uniform vec4 Global_ambient;
-        const int nlights = %(nlights)s;
-        uniform vec4 lights_position[nlights];
-        uniform vec4 lights_ambient[nlights];
-        uniform vec4 lights_diffuse[nlights];
-        uniform vec4 lights_specular[nlights];
-        varying vec3 baseNormal;
         void main() {
             vec4 fragColor = Global_ambient * material_ambient;
             int i;
             for (i=0;i<nlights;i+=1) {
-                // normalized eye-coordinate Light location
-                vec3 EC_Light_location = normalize(
-                    gl_NormalMatrix * lights_position[i].xyz
-                );
-                // half-vector calculation
-                vec3 Light_half = normalize(
-                    EC_Light_location - vec3( 0,0,-1 )
-                );
                 vec2 weights = phong_weightCalc(
-                    EC_Light_location,
-                    Light_half,
+                    EC_Light_location[i],
+                    EC_Light_half[i],
                     baseNormal,
                     material_shininess
                 );
@@ -273,7 +281,7 @@ class TestContext(BaseContext):
             }
             gl_FragColor = fragColor;
         }
-        """ % dict(nlights=len(self.lights)))
+        """)
         coords, indices = Sphere(
             radius=1
         ).compileArrays()
