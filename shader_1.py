@@ -218,10 +218,11 @@ class TestContext(BaseContext):
         ]
 
         for l in self.lights:
+            print('Light(')
             for k in Light._fields:
-                print('%s=[%s]' %
+                print('    %s=[%s],' %
                       (k, ', '.join('%g' % v for v in getattr(l, k))))
-            print('')
+            print('),')
         shader_common = """
         const int nlights = %(nlights)s;
         uniform vec4 lights_position[nlights];
