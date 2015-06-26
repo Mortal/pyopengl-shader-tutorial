@@ -290,7 +290,8 @@ class TestContext(BaseContext):
                       centerX, centerY, centerZ,
                       upX, upY, upZ)
         G.glMatrixMode(G.GL_PROJECTION)
-        GLU.gluPerspective(45, 1, 1, 100)
+        G.glLoadIdentity()
+        GLU.gluPerspective(12, 1, 1, 100)
 
     def set_terrain_vertices(self):
         heights = np.asarray(PIL.Image.open('/home/rav/rasters/ds11.tif').convert('F'))
@@ -353,7 +354,7 @@ class TestContext(BaseContext):
         vertices = np.asarray(vertices)
         vmin = vertices.min(axis=0, keepdims=True)
         vmax = vertices.max(axis=0, keepdims=True)
-        vertices = (vertices - vmin) / (vmax - vmin) * [5, 5, 2]
+        vertices = (vertices - vmin) / (vmax - vmin)
         v = list(zip(vertices, normals))
         self.shader.set_vertices(v, indices)
 
