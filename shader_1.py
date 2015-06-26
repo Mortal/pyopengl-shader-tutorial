@@ -52,9 +52,9 @@ class Shader(object):
         G.glCompileShader(shader)
         result = G.glGetShaderiv(shader, G.GL_COMPILE_STATUS)
         if not result:
-            print("Shader compilation failed\n%s\n%s\n%s" %
-                  (result, G.glGetShaderInfoLog(shader).decode(),
-                   textwrap.dedent(source.strip())))
+            print("Shader compilation failed\n%s\n%s" %
+                  (G.glGetShaderInfoLog(shader).decode(),
+                   textwrap.dedent(source.decode().strip())))
             raise SystemExit()
         return shader
 
@@ -224,6 +224,17 @@ class Shader(object):
         self.setuniform('material_specular', as4(material.specularColor))
 
 
+def read_shader(filename, D=None):
+    with open(filename) as fp:
+        source = fp.read()
+    if D is not None:
+        defines = ''.join('#define %s %s\n' % (k, v)
+                          for k, v in D.items())
+    else:
+        defines = ''
+    return defines + source
+
+
 class TestContext(BaseContext):
     """
     Demonstrates use of attribute types in GLSL
@@ -254,202 +265,32 @@ class TestContext(BaseContext):
             ),
         ]
         self.lights = [self.light_node_as_struct(l) for l in light_nodes]
-        shader_common = """
-        const int nlights = %(nlights)s;
-        uniform vec4 lights_position[nlights];
-        uniform vec4 lights_ambient[nlights];
-        uniform vec4 lights_diffuse[nlights];
-        uniform vec4 lights_specular[nlights];
-        uniform vec4 lights_attenuation[nlights];
-        // [ cos_spot_cutoff, spot_exponent, ignored, is_spot ]
-        uniform vec4 lights_spot[nlights];
-        uniform vec4 lights_spotdir[nlights];
-        varying vec3 EC_Light_half[nlights];
-        varying vec3 EC_Light_location[nlights];
-        varying float Light_distance[nlights];
-        varying vec3 baseNormal;
-        """ % dict(nlights=len(self.lights))
+        shader_common = read_shader(
+            'shader_common.h', D={'NLIGHTS': len(self.lights)})
 
-        phong_weightCalc = """
-        vec3 phong_weightCalc(
-            in vec3 light_pos, // light position/direction
-            in vec3 half_light, // half-way vector between light and view
-            in vec3 frag_normal, // geometry normal
-            in float shininess, // shininess exponent
-            in float distance, // distance for attenuation calculation...
-            in vec4 attenuations, // attenuation parameters...
-            in vec4 spot_params, // spot control parameters...
-            in vec4 spot_direction // model-space direction
-        ) {
-            // returns vec3( ambientMult, diffuseMult, specularMult )
-            float n_dot_pos = max( 0.0, dot(
-                frag_normal, light_pos
-            ));
-            float n_dot_half = 0.0;
-            float attenuation = 1.0;
-            if (n_dot_pos > -.05) {
-                float spot_effect = 1.0;
-                if (spot_params.w != 0.0) {
-                    // is a spot...
-                    float spot_cos = dot(
-                        gl_NormalMatrix * normalize(spot_direction.xyz),
-                        normalize(-light_pos)
-                    );
-                    if (spot_cos <= spot_params.x) {
-                        // is a spot, and is outside the cone-of-light...
-                        return vec3( 0.0, 0.0, 0.0 );
-                    } else {
-                        if (spot_cos == 1.0) {
-                            spot_effect = 1.0;
-                        } else {
-                            spot_effect = pow(
-                                    (1.0-spot_params.x)/(1.0-spot_cos),
-                                    spot_params.y
-                                );
-                        }
-                    }
-                }
-                n_dot_half = pow(
-                    max(0.0,dot(
-                        half_light, frag_normal
-                    )),
-                    shininess
-                );
-                if (distance != 0.0) {
-                    float attenuation = 1.0/(
-                        attenuations.x +
-                        (attenuations.y * distance) +
-                        (attenuations.z * distance * distance)
-                    );
-                    n_dot_half *= spot_effect;
-                    n_dot_pos *= attenuation;
-                    n_dot_half *= attenuation;
-                }
-            }
-            return vec3( attenuation, n_dot_pos, n_dot_half);
-        }
-        """
+        phong_weightCalc = read_shader('phong_weightCalc.h')
+        phong_preCalc = read_shader('phong_preCalc.h')
 
-        phong_preCalc = """
-        // Vertex-shader pre-calculation for lighting...
-        void phong_preCalc(
-            in vec3 vertex_position,
-            in vec4 light_position,
-            out float light_distance,
-            out vec3 ec_light_location,
-            out vec3 ec_light_half
-        ) {
-            // This is the core setup for a phong lighting pass
-            // as a reusable fragment of code.
-            // vertex_position -- un-transformed vertex position (world-space)
-            // light_position -- un-transformed light location (direction)
-            // light_distance -- output giving world-space distance-to-light
-            // ec_light_location -- output giving loc. of light in eye coords
-            // ec_light_half -- output giving the half-vector optimization
-            if (light_position.w == 0.0) {
-                // directional rather than positional light...
-                ec_light_location = normalize(
-                    gl_NormalMatrix *
-                    light_position.xyz
-                );
-                light_distance = 0.0;
-            } else {
-                // positional light, we calculate distance in
-                // model-view space here, so we take a partial
-                // solution...
-                vec3 ms_vec = (
-                    light_position.xyz -
-                    vertex_position
-                );
-                vec3 light_direction = gl_NormalMatrix * ms_vec;
-                ec_light_location = normalize( light_direction );
-                light_distance = abs(length( ms_vec ));
-            }
-            // half-vector calculation
-            ec_light_half = normalize(
-                ec_light_location + vec3( 0,0,1 )
-            );
-        }
-        """
-
-        light_preCalc = """
-        void light_preCalc( in vec3 vertex_position ) {
-            // This function is dependent on the uniforms and
-            // varying values we've been using, it basically
-            // just iterates over the phong_lightCalc passing in
-            // the appropriate pointers...
-            vec3 light_direction;
-            for (int i = 0; i< nlights; i++ ) {
-                phong_preCalc(
-                    vertex_position,
-                    lights_position[i],
-                    // following are the values to fill in...
-                    Light_distance[i],
-                    EC_Light_location[i],
-                    EC_Light_half[i]
-                );
-            }
-        }
-        """
+        light_preCalc = read_shader('light_preCalc.h')
 
         self.shader = Shader.compile(
-            shader_common + phong_preCalc + light_preCalc + """
-        attribute vec3 Vertex_position;
-        attribute vec3 Vertex_normal;
-        void main() {
-            gl_Position = gl_ModelViewProjectionMatrix * vec4(
-                Vertex_position, 1.0
-            );
-            baseNormal = gl_NormalMatrix * normalize(Vertex_normal);
-            light_preCalc(Vertex_position);
-        }
-        """,
-
-
-            shader_common + phong_weightCalc + """
-        uniform vec4 material_ambient;
-        uniform vec4 material_diffuse;
-        uniform vec4 material_specular;
-        uniform float material_shininess;
-        uniform vec4 Global_ambient;
-        void main() {
-            vec4 fragColor = Global_ambient * material_ambient;
-            int i;
-            for (i=0;i<nlights;i+=1) {
-                vec3 weights = phong_weightCalc(
-                    normalize(EC_Light_location[i]),
-                    normalize(EC_Light_half[i]),
-                    normalize(baseNormal),
-                    material_shininess,
-                    // some implementations will produce negative values
-                    // interpolating positive float-arrays!
-                    // so we have to do an extra abs call for distance
-                    abs(Light_distance[i]),
-                    lights_attenuation[i],
-                    lights_spot[i],
-                    lights_spotdir[i]
-                );
-                fragColor = (
-                    fragColor
-                    + (lights_ambient[i] * material_ambient * weights.x)
-                    + (lights_diffuse[i] * material_diffuse * weights.y)
-                    + (lights_specular[i] * material_specular * weights.z)
-                );
-            }
-            gl_FragColor = fragColor;
-        }
-        """)
+            shader_common + phong_preCalc + light_preCalc +
+            read_shader('vertex.h'),
+            shader_common + phong_weightCalc +
+            read_shader('fragment.h'))
 
         self.set_terrain_vertices()
 
     def set_view(self):
         G.glMatrixMode(G.GL_MODELVIEW)
-        eyeX, eyeY, eyeZ = 1, 1, 1
-        centerX, centerY, centerZ = 0, 0, 0
+        eyeX, eyeY, eyeZ = 2, 2, 2
+        centerX, centerY, centerZ = 0.5, 0.5, 0.5
         upX, upY, upZ = 0, 0, 1
         GLU.gluLookAt(eyeX, eyeY, eyeZ,
                       centerX, centerY, centerZ,
                       upX, upY, upZ)
+        G.glMatrixMode(G.GL_PROJECTION)
+        GLU.gluPerspective(45, 1, 1, 100)
 
     def set_terrain_vertices(self):
         heights = np.asarray(PIL.Image.open('/home/rav/rasters/ds11.tif').convert('F'))
