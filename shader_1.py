@@ -6,7 +6,8 @@ import collections
 import numpy as np
 
 from OpenGLContext import testingcontext
-from OpenGL import GL as G
+import OpenGL.GL as G
+import OpenGL.GLU as GLU
 from OpenGL.arrays import vbo
 from OpenGL.GL import shaders
 from OpenGLContext.scenegraph import basenodes as N
@@ -442,9 +443,12 @@ class TestContext(BaseContext):
 
     def set_view(self):
         G.glMatrixMode(G.GL_MODELVIEW)
-        G.glRotatef(-60., 1., 0., 0.)
-        G.glRotatef(-160., 0., 0., 1.)
-        # G.glTranslatef(-1., -1., 0.)
+        eyeX, eyeY, eyeZ = 5, 4, 4
+        centerX, centerY, centerZ = 2, 1.5, 2.5
+        upX, upY, upZ = 0, 0, 1
+        GLU.gluLookAt(eyeX, eyeY, eyeZ,
+                      centerX, centerY, centerZ,
+                      upX, upY, upZ)
 
     def set_terrain_vertices(self):
         heights = np.asarray([
@@ -452,6 +456,8 @@ class TestContext(BaseContext):
             [3, 2, 1, 0],
             [2, 1, 0.5, 0],
         ])
+        # quads[i] is [norm, a, b, c, d],
+        # abcd counter-clockwise around norm
         quads = []
         for y, row in enumerate(heights):
             for x, z in enumerate(row):
@@ -468,24 +474,24 @@ class TestContext(BaseContext):
                      [x + 1, y, 0],
                      [x + 1, y + 1, 0],
                      [x + 1, y + 1, z]))
-                # quads.append(
-                #     ([-1, 0, 0],
-                #      [x, y, z],
-                #      [x, y, 0],
-                #      [x, y + 1, 0],
-                #      [x, y + 1, z]))
+                quads.append(
+                    ([-1, 0, 0],
+                     [x, y + 1, 0],
+                     [x, y, 0],
+                     [x, y, z],
+                     [x, y + 1, z]))
                 quads.append(
                     ([0, 1, 0],
                      [x + 1, y + 1, 0],
                      [x, y + 1, 0],
                      [x, y + 1, z],
                      [x + 1, y + 1, z]))
-                # quads.append(
-                #     ([0, -1, 0],
-                #      [x, y, z],
-                #      [x, y, 0],
-                #      [x + 1, y, 0],
-                #      [x + 1, y, z]))
+                quads.append(
+                    ([0, -1, 0],
+                     [x, y, z],
+                     [x, y, 0],
+                     [x + 1, y, 0],
+                     [x + 1, y, z]))
         vertices = []
         indices = []
         for norm, a, b, c, d in quads:
