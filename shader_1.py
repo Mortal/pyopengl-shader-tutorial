@@ -4,6 +4,7 @@ import textwrap
 import collections
 
 import numpy as np
+import PIL.Image
 
 from OpenGLContext import testingcontext
 import OpenGL.GL as G
@@ -443,19 +444,16 @@ class TestContext(BaseContext):
 
     def set_view(self):
         G.glMatrixMode(G.GL_MODELVIEW)
-        eyeX, eyeY, eyeZ = 5, 4, 4
-        centerX, centerY, centerZ = 2, 1.5, 2.5
+        eyeX, eyeY, eyeZ = 1, 1, 1
+        centerX, centerY, centerZ = 0, 0, 0
         upX, upY, upZ = 0, 0, 1
         GLU.gluLookAt(eyeX, eyeY, eyeZ,
                       centerX, centerY, centerZ,
                       upX, upY, upZ)
 
     def set_terrain_vertices(self):
-        heights = np.asarray([
-            [5, 3, 2, 1],
-            [3, 2, 1, 0],
-            [2, 1, 0.5, 0],
-        ])
+        heights = np.asarray(PIL.Image.open('/home/rav/rasters/ds11.tif').convert('F'))
+        heights = heights[:40, :40]
         # quads[i] is [norm, a, b, c, d],
         # abcd counter-clockwise around norm
         quads = []
@@ -468,45 +466,55 @@ class TestContext(BaseContext):
                      [x + 1, y, z],
                      [x + 1, y + 1, z],
                      [x, y + 1, z]))
-                quads.append(
-                    ([1, 0, 0],
-                     [x + 1, y, z],
-                     [x + 1, y, 0],
-                     [x + 1, y + 1, 0],
-                     [x + 1, y + 1, z]))
-                quads.append(
-                    ([-1, 0, 0],
-                     [x, y + 1, 0],
-                     [x, y, 0],
-                     [x, y, z],
-                     [x, y + 1, z]))
-                quads.append(
-                    ([0, 1, 0],
-                     [x + 1, y + 1, 0],
-                     [x, y + 1, 0],
-                     [x, y + 1, z],
-                     [x + 1, y + 1, z]))
-                quads.append(
-                    ([0, -1, 0],
-                     [x, y, z],
-                     [x, y, 0],
-                     [x + 1, y, 0],
-                     [x + 1, y, z]))
+                z2 = heights[y, x + 1] if x + 1 < len(row) else 0
+                if z2 < z:
+                    quads.append(
+                        ([1, 0, 0],
+                         [x + 1, y, z],
+                         [x + 1, y, z2],
+                         [x + 1, y + 1, z2],
+                         [x + 1, y + 1, z]))
+                z2 = heights[y, x - 1] if x > 0 else 0
+                if z2 < z:
+                    quads.append(
+                        ([-1, 0, 0],
+                         [x, y + 1, z2],
+                         [x, y, z2],
+                         [x, y, z],
+                         [x, y + 1, z]))
+                z2 = heights[y + 1, x] if y + 1 < len(heights) else 0
+                if z2 < z:
+                    quads.append(
+                        ([0, 1, 0],
+                         [x + 1, y + 1, 0],
+                         [x, y + 1, 0],
+                         [x, y + 1, z],
+                         [x + 1, y + 1, z]))
+                z2 = heights[y - 1, x] if y > 0 else 0
+                if z2 < z:
+                    quads.append(
+                        ([0, -1, 0],
+                         [x, y, z],
+                         [x, y, 0],
+                         [x + 1, y, 0],
+                         [x + 1, y, z]))
         vertices = []
+        normals = []
         indices = []
         for norm, a, b, c, d in quads:
             ai, bi, ci, di = range(len(vertices), len(vertices) + 4)
-            vertices += [
-                [a, norm],
-                [b, norm],
-                [c, norm],
-                [d, norm],
-            ]
+            vertices += [a, b, c, d]
+            normals += 4*[norm]
             indices += [
                 ai, bi, di,
                 bi, ci, di,
             ]
-        self.shader.set_vertices(vertices, indices)
+        vertices = np.asarray(vertices)
+        vmin = vertices.min(axis=0, keepdims=True)
+        vmax = vertices.max(axis=0, keepdims=True)
+        vertices = (vertices - vmin) / (vmax - vmin) * [5, 5, 2]
+        v = list(zip(vertices, normals))
+        self.shader.set_vertices(v, indices)
 
     def Render(self, mode=0):
         """Render the geometry for the scene."""
