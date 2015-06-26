@@ -440,28 +440,66 @@ class TestContext(BaseContext):
 
         self.set_terrain_vertices()
 
+    def set_view(self):
+        G.glMatrixMode(G.GL_MODELVIEW)
+        G.glRotatef(-60., 1., 0., 0.)
+        G.glRotatef(-160., 0., 0., 1.)
+        # G.glTranslatef(-1., -1., 0.)
+
     def set_terrain_vertices(self):
         heights = np.asarray([
             [5, 3, 2, 1],
             [3, 2, 1, 0],
             [2, 1, 0.5, 0],
         ])
-        vertices = []
-        indices = []
+        quads = []
         for y, row in enumerate(heights):
             for x, z in enumerate(row):
                 norm = [0, 0, 1]
-                nw, ne, sw, se = range(len(vertices), len(vertices) + 4)
-                vertices += [
-                    [[x, y, z], norm],
-                    [[x + 1, y, z], norm],
-                    [[x, y + 1, z], norm],
-                    [[x + 1, y + 1, z], norm],
-                ]
-                indices += [
-                    nw, ne, sw,
-                    sw, ne, se,
-                ]
+                quads.append(
+                    ([0, 0, 1],
+                     [x, y, z],
+                     [x + 1, y, z],
+                     [x + 1, y + 1, z],
+                     [x, y + 1, z]))
+                quads.append(
+                    ([1, 0, 0],
+                     [x + 1, y, z],
+                     [x + 1, y, 0],
+                     [x + 1, y + 1, 0],
+                     [x + 1, y + 1, z]))
+                # quads.append(
+                #     ([-1, 0, 0],
+                #      [x, y, z],
+                #      [x, y, 0],
+                #      [x, y + 1, 0],
+                #      [x, y + 1, z]))
+                quads.append(
+                    ([0, 1, 0],
+                     [x + 1, y + 1, 0],
+                     [x, y + 1, 0],
+                     [x, y + 1, z],
+                     [x + 1, y + 1, z]))
+                # quads.append(
+                #     ([0, -1, 0],
+                #      [x, y, z],
+                #      [x, y, 0],
+                #      [x + 1, y, 0],
+                #      [x + 1, y, z]))
+        vertices = []
+        indices = []
+        for norm, a, b, c, d in quads:
+            ai, bi, ci, di = range(len(vertices), len(vertices) + 4)
+            vertices += [
+                [a, norm],
+                [b, norm],
+                [c, norm],
+                [d, norm],
+            ]
+            indices += [
+                ai, bi, di,
+                bi, ci, di,
+            ]
         self.shader.set_vertices(vertices, indices)
 
     def Render(self, mode=0):
@@ -479,6 +517,7 @@ class TestContext(BaseContext):
             for k in Light._fields:
                 self.shader.setuniforms(
                     'lights_' + k, [getattr(l, k) for l in self.lights])
+            self.set_view()
             self.shader.draw()
 
     def light_node_as_struct(self, light):
