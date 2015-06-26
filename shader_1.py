@@ -1,5 +1,6 @@
 # From http://pyopengl.sourceforge.net/context/tutorials/shader_10.html
 import re
+import time
 import textwrap
 import collections
 
@@ -124,32 +125,10 @@ class Shader(object):
             finally:
                 shaders.glUseProgram(0)
 
-    def add(self, *args, **kwargs):
-        for i, arg in enumerate(args):
-            try:
-                a = self._attrs[i]
-            except IndexError:
-                raise ValueError(
-                    "Supplied %d args, but attrs are: %s" %
-                    (len(args), ', '.join(a.name for a in self._attrs)))
-            if a.name in kwargs:
-                raise ValueError("Multiply specified: %s" % a.name)
-            kwargs[a.name] = arg
-
-        attrs = set(a.name for a in self._attrs)
-        values = {}
-        for k, v in kwargs.items():
-            attrs.remove(k)
-            a = self._vars[k]
-            v = np.asarray(v, dtype=a.type.dtype)
-            if len(v) != a.type.n:
-                raise ValueError(
-                    "Attribute %s has wrong length: Got %s, expected %s" %
-                    (k, len(v), a.type.n))
-            values[k] = v
-        if attrs:
-            raise ValueError("Missing attribute(s): %r" % (attrs,))
-        vertex = np.asarray([values[a.name] for a in self._attrs]).ravel()
+    def add(self, *args):
+        if tuple(len(a) for a in args) != tuple(a.type.n for a in self._attrs):
+            raise ValueError("Incorrect args")
+        vertex = np.concatenate(args)
         self._vertices.append(vertex)
 
     def init_vbo(self):
@@ -181,11 +160,18 @@ class Shader(object):
             self._locs[a.name] = l
 
     def set_vertices(self, vertices, indices=None):
+        t1 = time.time()
         self._vertices = []
+        vertices = [np.asarray(list(xs)) for xs in zip(*vertices)]
+        vertices = list(zip(*vertices))
         for v in vertices:
             self.add(*v)
         self._indices = indices
+        t2 = time.time()
+        print("%s times add() took %.4f s" % (len(vertices), t2 - t1))
         self.init_vbo()
+        t3 = time.time()
+        print("init_vbo took %.4f s" % (t3 - t2,))
 
     def setuniform(self, name, value):
         a = self._vars[name]
@@ -294,7 +280,10 @@ class TestContext(BaseContext):
         GLU.gluPerspective(12, 1, 1, 100)
 
     def set_terrain_vertices(self):
+        t1 = time.time()
         heights = np.asarray(PIL.Image.open('/home/rav/rasters/ds11.tif').convert('F'))
+        t2 = time.time()
+        print("Reading heights took %.4f s" % (t2 - t1,))
         heights = heights[:40, :40]
         # quads[i] is [norm, a, b, c, d],
         # abcd counter-clockwise around norm
@@ -340,6 +329,8 @@ class TestContext(BaseContext):
                          [x, y, 0],
                          [x + 1, y, 0],
                          [x + 1, y, z]))
+        t3 = time.time()
+        print("Creating %s quads from %s cells took %.4f s" % (len(quads), len(heights.ravel()), t3 - t2))
         vertices = []
         normals = []
         indices = []
@@ -356,7 +347,11 @@ class TestContext(BaseContext):
         vmax = vertices.max(axis=0, keepdims=True)
         vertices = (vertices - vmin) / (vmax - vmin)
         v = list(zip(vertices, normals))
+        t4 = time.time()
+        print("Post-processing quads took %.4f s" % (t4 - t3,))
         self.shader.set_vertices(v, indices)
+        t5 = time.time()
+        print("set_vertices took %.4f s" % (t5 - t4,))
 
     def Render(self, mode=0):
         """Render the geometry for the scene."""
