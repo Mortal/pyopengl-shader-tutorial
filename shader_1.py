@@ -128,7 +128,7 @@ class Shader(object):
     def add(self, *args):
         if tuple(len(a) for a in args) != tuple(a.type.n for a in self._attrs):
             raise ValueError("Incorrect args")
-        vertex = np.concatenate(args)
+        vertex = np.asarray(args, dtype=np.float32).ravel()
         self._vertices.append(vertex)
 
     def init_vbo(self):
@@ -137,7 +137,7 @@ class Shader(object):
         self._vbo = vbo.VBO(vbo_data)
         if self._indices is not None:
             self._indices_vbo = vbo.VBO(
-                np.asarray(self._indices, dtype=np.uint16),
+                np.asarray(self._indices, dtype=np.uint32),
                 target='GL_ELEMENT_ARRAY_BUFFER')
         else:
             self._indices_vbo = None
@@ -160,18 +160,11 @@ class Shader(object):
             self._locs[a.name] = l
 
     def set_vertices(self, vertices, indices=None):
-        t1 = time.time()
-        self._vertices = []
-        vertices = [np.asarray(list(xs)) for xs in zip(*vertices)]
-        vertices = list(zip(*vertices))
-        for v in vertices:
-            self.add(*v)
+        vertices = [np.asarray(list(xs), dtype=a.type.dtype)
+                    for xs, a in zip(zip(*vertices), self._attrs)]
+        self._vertices = np.hstack(vertices)
         self._indices = indices
-        t2 = time.time()
-        print("%s times add() took %.4f s" % (len(vertices), t2 - t1))
         self.init_vbo()
-        t3 = time.time()
-        print("init_vbo took %.4f s" % (t3 - t2,))
 
     def setuniform(self, name, value):
         a = self._vars[name]
@@ -190,7 +183,7 @@ class Shader(object):
     def draw(self):
         if self._indices_vbo is not None:
             G.glDrawElements(G.GL_TRIANGLES, len(self._indices),
-                             G.GL_UNSIGNED_SHORT, self._indices_vbo)
+                             G.GL_UNSIGNED_INT, self._indices_vbo)
         else:
             G.glDrawArrays(G.GL_TRIANGLES, 0, len(self._vertices))
 
@@ -269,22 +262,25 @@ class TestContext(BaseContext):
 
     def set_view(self):
         G.glMatrixMode(G.GL_MODELVIEW)
-        eyeX, eyeY, eyeZ = 2, 2, 2
-        centerX, centerY, centerZ = 0.5, 0.5, 0.5
+        eyeX, eyeY, eyeZ = 5, 5, 5
+        centerX, centerY, centerZ = 0, 0, 0
         upX, upY, upZ = 0, 0, 1
+        G.glLoadIdentity()
         GLU.gluLookAt(eyeX, eyeY, eyeZ,
                       centerX, centerY, centerZ,
                       upX, upY, upZ)
+
         G.glMatrixMode(G.GL_PROJECTION)
         G.glLoadIdentity()
-        GLU.gluPerspective(12, 1, 1, 100)
+        GLU.gluPerspective(20, 1, 0.1, 100)
 
     def set_terrain_vertices(self):
         t1 = time.time()
-        heights = np.asarray(PIL.Image.open('/home/rav/rasters/ds11.tif').convert('F'))
+        heights = np.asarray(
+            PIL.Image.open('/home/rav/rasters/ds11.tif').convert('F'))
         t2 = time.time()
         print("Reading heights took %.4f s" % (t2 - t1,))
-        heights = heights[:40, :40]
+        heights = heights[:100, :100]
         # quads[i] is [norm, a, b, c, d],
         # abcd counter-clockwise around norm
         quads = []
