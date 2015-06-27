@@ -271,13 +271,15 @@ class TestContext(BaseContext):
 
     def set_view(self):
         G.glMatrixMode(G.GL_MODELVIEW)
-        center = np.array([0.5, 0.5])
+        center = np.array([0.5, 0.5, 0])
         radius = 4.5
-        eye = center + radius * np.array([np.cos(self.angle), np.sin(self.angle)])
-        eyeX, eyeY = eye
-        eyeZ = 1
-        centerX, centerY = center
-        centerZ = 0.1
+        v = np.pi * 0.3
+        eye = (center +
+               radius *
+               np.array([np.cos(self.angle), np.sin(self.angle), 1]) *
+               np.array([np.cos(v), np.cos(v), np.sin(v)]))
+        eyeX, eyeY, eyeZ = eye
+        centerX, centerY, centerZ = center
         upX, upY, upZ = 0, 0, 1
         G.glLoadIdentity()
         GLU.gluLookAt(eyeX, eyeY, eyeZ,
