@@ -13,6 +13,7 @@ import OpenGL.GLU as GLU
 from OpenGL.arrays import vbo
 from OpenGL.GL import shaders
 from OpenGLContext.scenegraph import basenodes as N
+from OpenGLContext.events.timer import Timer
 
 BaseContext = testingcontext.getInteractive()
 
@@ -258,12 +259,22 @@ class TestContext(BaseContext):
             shader_common + phong_weightCalc +
             read_shader('fragment.h'))
 
-        self.set_terrain_vertices()
+        self.angle = 0
+
+        self.time = Timer(duration=14.0, repeating=1)
+        self.time.addEventHandler("fraction", self.OnTimerFraction)
+        self.time.register(self)
+        self.time.start()
+
+        self.set_terrain_ttd()
 
     def set_view(self):
         G.glMatrixMode(G.GL_MODELVIEW)
-        eyeX, eyeY, eyeZ = 5, 5, 5
-        centerX, centerY, centerZ = 0, 0, 0
+        center = np.array([0.5, 0.5, 0.5])
+        radius = 4.5
+        eye = center + radius * np.array([np.cos(self.angle), np.sin(self.angle), 1])
+        eyeX, eyeY, eyeZ = eye
+        centerX, centerY, centerZ = center
         upX, upY, upZ = 0, 0, 1
         G.glLoadIdentity()
         GLU.gluLookAt(eyeX, eyeY, eyeZ,
@@ -274,15 +285,19 @@ class TestContext(BaseContext):
         G.glLoadIdentity()
         GLU.gluPerspective(20, 1, 0.1, 100)
 
-    def set_terrain_vertices(self):
+    def load_terrain(self):
         t1 = time.time()
         heights = np.asarray(
             PIL.Image.open('/home/rav/rasters/ds11.tif').convert('F'))
         t2 = time.time()
         print("Reading heights took %.4f s" % (t2 - t1,))
-        heights = heights[:100, :100]
+        return heights[:10, :10]
+
+    def set_terrain_mc(self):
+        heights = self.load_terrain()
+        t2 = time.time()
         # quads[i] is [norm, a, b, c, d],
-        # abcd counter-clockwise around norm
+        # abcd right-handed counter-clockwise around norm
         quads = []
         for y, row in enumerate(heights):
             for x, z in enumerate(row):
@@ -349,6 +364,43 @@ class TestContext(BaseContext):
         t5 = time.time()
         print("set_vertices took %.4f s" % (t5 - t4,))
 
+    def set_terrain_ttd(self):
+        heights = self.load_terrain()
+        ts = []
+        for i, (r1, r2) in enumerate(zip(heights[:-1], heights[1:])):
+            # quads are right-handed counter-clockwise
+            cells = zip(r1[:-1], r1[1:], r2[1:], r2[:-1])
+            for j, (a, b, c, d) in enumerate(cells):
+                if a + c > b + d:
+                    # bd is the lower diagonal
+                    ts.append(np.asarray([
+                        i, j, a, i, j + 1, b, i + 1, j, d
+                    ]))
+                    ts.append(np.asarray([
+                        i, j + 1, b, i + 1, j + 1, c, i + 1, j, d
+                    ]))
+                else:
+                    # ac is the lower diagonal
+                    ts.append(np.asarray([
+                        i, j, a, i + 1, j + 1, c, i + 1, j, d
+                    ]))
+                    ts.append(np.asarray([
+                        i, j, a, i, j + 1, b, i + 1, j + 1, c
+                    ]))
+                    pass
+        ts = np.asarray(ts)
+        nts = len(ts)  # number of triangles
+        p1 = ts[:, 0:3]
+        p2 = ts[:, 3:6]
+        p3 = ts[:, 6:9]
+        n = np.cross(p2 - p1, p3 - p1)  # surface normals
+        v = np.c_[p1, n, p2, n, p3, n].reshape(3 * nts, 2, 3)
+        vertices = v[:, 0, :]
+        vmin = vertices.min(axis=0, keepdims=True)
+        vmax = v[:, 0, :].max(axis=0, keepdims=True)
+        vertices[:] = (vertices - vmin) / (vmax - vmin)
+        self.shader.set_vertices(v)
+
     def Render(self, mode=0):
         """Render the geometry for the scene."""
         super().Render(mode)
@@ -400,6 +452,11 @@ class TestContext(BaseContext):
             spot=spot,
             spotdir=spotdir,
         )
+
+    def OnTimerFraction(self, event):
+        frac = event.fraction()
+        self.angle = 2 * np.pi * frac
+        self.triggerRedraw()
 
 
 if __name__ == "__main__":
