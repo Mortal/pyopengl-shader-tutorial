@@ -403,9 +403,10 @@ class TestContext(BaseContext):
         v = np.c_[p1, n, p3, n, p2, n].reshape(3 * nts, 2, 3)
         vertices = v[:, 0, :]
         vmin = vertices.min(axis=0, keepdims=True)
-        vmax = v[:, 0, :].max(axis=0, keepdims=True)
-        vmax[0, 2] *= 20
+        vmax = vertices.max(axis=0, keepdims=True)
         vertices[:] = (vertices - vmin) / (vmax - vmin)
+        vertices[:, 2] -= 0.5
+        vertices[:, 2] /= 2
         self.shader.set_vertices(v)
 
     def Render(self, mode=0):
