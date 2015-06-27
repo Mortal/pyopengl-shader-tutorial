@@ -222,8 +222,8 @@ class TestContext(BaseContext):
     def OnInit(self):
         light_nodes = [
             N.DirectionalLight(
-                color=(.1, .1, 0),
-                intensity=0.1,
+                color=(.1, .8, 0),
+                intensity=0.8,
                 ambientIntensity=0.1,
                 direction=(-.4, -.4, -1),
             ),
@@ -406,7 +406,7 @@ class TestContext(BaseContext):
         vmax = vertices.max(axis=0, keepdims=True)
         vertices[:] = (vertices - vmin) / (vmax - vmin)
         vertices[:, 2] -= 0.5
-        vertices[:, 2] /= 2
+        vertices[:, 2] /= (vmax[0, 2] - vmin[0, 2]) / 4
         self.shader.set_vertices(v)
 
     def Render(self, mode=0):
@@ -414,11 +414,11 @@ class TestContext(BaseContext):
         super().Render(mode)
         with self.shader:
             for name, val in [
-                ('Global_ambient', (.05, .05, .05, 1.0)),
-                ('material_ambient', (.2, .8, .2, 1.0)),
+                ('Global_ambient', (.2, .2, .2, 1.0)),
+                ('material_ambient', (.5, .8, .5, 1.0)),
                 ('material_diffuse', (.2, .8, .2, 1.0)),
-                ('material_specular', (.5, .5, .5, 1.0)),
-                ('material_shininess', (0,)),
+                ('material_specular', (.05, .05, .05, 1.0)),
+                ('material_shininess', (1,)),
             ]:
                 self.shader.setuniform(name, val)
             for k in Light._fields:
