@@ -221,12 +221,12 @@ class TestContext(BaseContext):
     """
     def OnInit(self):
         light_nodes = [
-            # N.DirectionalLight(
-            #     color=(.3, 1, 0),
-            #     intensity=0.5,
-            #     ambientIntensity=0.3,
-            #     direction=(-.4, -.4, -1),
-            # ),
+            N.DirectionalLight(
+                color=(.1, .1, 0),
+                intensity=0.1,
+                ambientIntensity=0.1,
+                direction=(-.4, -.4, -1),
+            ),
             # N.SpotLight(
             #     location=(0.5, 0.5, 1),
             #     color=(1, 1, 1),
@@ -237,13 +237,13 @@ class TestContext(BaseContext):
             #     direction=(0, 0, -1),
             #     intensity=.5,
             # ),
-            N.PointLight(
-                location=(0.5, 0.5, 0.2),
-                color=(0.5, 0.5, 0.5),
-                intensity=.1,
-                ambientIntensity=0,
-                attenuation=(0, .5, 0),
-            ),
+            # N.PointLight(
+            #     location=(0.5, 0.5, 0.2),
+            #     color=(0.5, 0.5, 0.5),
+            #     intensity=.1,
+            #     ambientIntensity=0,
+            #     attenuation=(0, .5, 0),
+            # ),
         ]
         self.lights = [self.light_node_as_struct(l) for l in light_nodes]
         shader_common = read_shader(
