@@ -227,6 +227,12 @@ class TestContext(BaseContext):
                 ambientIntensity=0.1,
                 direction=(-.4, -.4, -1),
             ),
+            N.DirectionalLight(
+                color=(.1, .8, 0),
+                intensity=0.4,
+                ambientIntensity=0.1,
+                direction=(.4, -.4, -1),
+            ),
             # N.SpotLight(
             #     location=(0.5, 0.5, 1),
             #     color=(1, 1, 1),
@@ -269,11 +275,17 @@ class TestContext(BaseContext):
 
         self.set_terrain_ttd()
 
+        self.vw = self.vh = 300
+
+    def OnResize(self, *args):
+        self.vw, self.vh = args
+        super().OnResize(*args)
+
     def set_view(self):
         G.glMatrixMode(G.GL_MODELVIEW)
         center = np.array([0.5, 0.5, 0])
         radius = 4.5
-        v = np.pi * 0.3
+        v = np.pi * 0.2
         eye = (center +
                radius *
                np.array([np.cos(self.angle), np.sin(self.angle), 1]) *
@@ -288,8 +300,10 @@ class TestContext(BaseContext):
 
         G.glMatrixMode(G.GL_PROJECTION)
         G.glLoadIdentity()
-        vfov = 5
-        GLU.gluPerspective(vfov, 1, 0.1, 100)
+        vfov = self.vh / 150
+        if vfov > 10:
+            vfov = 10 * (1 + np.log(vfov / 10))
+        GLU.gluPerspective(vfov, self.vw / self.vh, 0.1, 100)
 
     def load_terrain(self):
         t1 = time.time()
@@ -360,9 +374,7 @@ class TestContext(BaseContext):
                 bi, ci, di,
             ]
         vertices = np.asarray(vertices)
-        vmin = vertices.min(axis=0, keepdims=True)
-        vmax = vertices.max(axis=0, keepdims=True)
-        vertices = (vertices - vmin) / (vmax - vmin)
+        self.normalize_vertices(vertices)
         v = list(zip(vertices, normals))
         t4 = time.time()
         print("Post-processing quads took %.4f s" % (t4 - t3,))
@@ -401,13 +413,15 @@ class TestContext(BaseContext):
         p3 = ts[:, 6:9]
         n = np.cross(p3 - p1, p2 - p1)  # surface normals
         v = np.c_[p1, n, p3, n, p2, n].reshape(3 * nts, 2, 3)
-        vertices = v[:, 0, :]
+        self.normalize_vertices(v[:, 0, :])
+        self.shader.set_vertices(v)
+
+    def normalize_vertices(self, vertices):
         vmin = vertices.min(axis=0, keepdims=True)
         vmax = vertices.max(axis=0, keepdims=True)
         vertices[:] = (vertices - vmin) / (vmax - vmin)
         vertices[:, 2] -= 0.5
-        vertices[:, 2] /= (vmax[0, 2] - vmin[0, 2]) / 4
-        self.shader.set_vertices(v)
+        vertices[:, 2] /= (vmax[0, 2] - vmin[0, 2]) / 40
 
     def Render(self, mode=0):
         """Render the geometry for the scene."""
