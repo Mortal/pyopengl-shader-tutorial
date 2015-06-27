@@ -221,27 +221,28 @@ class TestContext(BaseContext):
     """
     def OnInit(self):
         light_nodes = [
-            N.DirectionalLight(
-                color=(0, 1, .1),
-                intensity=1.0,
-                ambientIntensity=0.1,
-                direction=(-.4, -1, -.4),
-            ),
-            N.SpotLight(
-                location=(-2.5, 2.5, 2.5),
-                color=(1, 0, .3),
-                ambientIntensity=.1,
-                attenuation=(0, 0, 1),
-                beamWidth=np.pi/2,
-                cutOffAngle=np.pi*.9,
-                direction=(2.5, -5.5, -2.5),
-                intensity=.5,
-            ),
+            # N.DirectionalLight(
+            #     color=(.3, 1, 0),
+            #     intensity=0.5,
+            #     ambientIntensity=0.3,
+            #     direction=(-.4, -.4, -1),
+            # ),
+            # N.SpotLight(
+            #     location=(0.5, 0.5, 1),
+            #     color=(1, 1, 1),
+            #     ambientIntensity=.1,
+            #     attenuation=(0, 0, 1),
+            #     beamWidth=np.pi*0.2,
+            #     cutOffAngle=np.pi*.9,
+            #     direction=(0, 0, -1),
+            #     intensity=.5,
+            # ),
             N.PointLight(
-                location=(0, -3.06, 3.06),
-                color=(.05, .05, 1),
-                intensity=.5,
-                ambientIntensity=.1,
+                location=(0.5, 0.5, 0.2),
+                color=(0.5, 0.5, 0.5),
+                intensity=.1,
+                ambientIntensity=0,
+                attenuation=(0, .5, 0),
             ),
         ]
         self.lights = [self.light_node_as_struct(l) for l in light_nodes]
@@ -261,7 +262,7 @@ class TestContext(BaseContext):
 
         self.angle = 0
 
-        self.time = Timer(duration=14.0, repeating=1)
+        self.time = Timer(duration=20.0, repeating=1)
         self.time.addEventHandler("fraction", self.OnTimerFraction)
         self.time.register(self)
         self.time.start()
@@ -270,11 +271,13 @@ class TestContext(BaseContext):
 
     def set_view(self):
         G.glMatrixMode(G.GL_MODELVIEW)
-        center = np.array([0.5, 0.5, 0.5])
+        center = np.array([0.5, 0.5])
         radius = 4.5
-        eye = center + radius * np.array([np.cos(self.angle), np.sin(self.angle), 1])
-        eyeX, eyeY, eyeZ = eye
-        centerX, centerY, centerZ = center
+        eye = center + radius * np.array([np.cos(self.angle), np.sin(self.angle)])
+        eyeX, eyeY = eye
+        eyeZ = 1
+        centerX, centerY = center
+        centerZ = 0.1
         upX, upY, upZ = 0, 0, 1
         G.glLoadIdentity()
         GLU.gluLookAt(eyeX, eyeY, eyeZ,
@@ -283,7 +286,8 @@ class TestContext(BaseContext):
 
         G.glMatrixMode(G.GL_PROJECTION)
         G.glLoadIdentity()
-        GLU.gluPerspective(20, 1, 0.1, 100)
+        vfov = 5
+        GLU.gluPerspective(vfov, 1, 0.1, 100)
 
     def load_terrain(self):
         t1 = time.time()
@@ -291,7 +295,7 @@ class TestContext(BaseContext):
             PIL.Image.open('/home/rav/rasters/ds11.tif').convert('F'))
         t2 = time.time()
         print("Reading heights took %.4f s" % (t2 - t1,))
-        return heights[:10, :10]
+        return heights[:200, :200]
 
     def set_terrain_mc(self):
         heights = self.load_terrain()
@@ -393,11 +397,12 @@ class TestContext(BaseContext):
         p1 = ts[:, 0:3]
         p2 = ts[:, 3:6]
         p3 = ts[:, 6:9]
-        n = np.cross(p2 - p1, p3 - p1)  # surface normals
-        v = np.c_[p1, n, p2, n, p3, n].reshape(3 * nts, 2, 3)
+        n = np.cross(p3 - p1, p2 - p1)  # surface normals
+        v = np.c_[p1, n, p3, n, p2, n].reshape(3 * nts, 2, 3)
         vertices = v[:, 0, :]
         vmin = vertices.min(axis=0, keepdims=True)
         vmax = v[:, 0, :].max(axis=0, keepdims=True)
+        vmax[0, 2] *= 20
         vertices[:] = (vertices - vmin) / (vmax - vmin)
         self.shader.set_vertices(v)
 
@@ -407,10 +412,10 @@ class TestContext(BaseContext):
         with self.shader:
             for name, val in [
                 ('Global_ambient', (.05, .05, .05, 1.0)),
-                ('material_ambient', (.2, .2, .2, 1.0)),
-                ('material_diffuse', (.5, .5, .5, 1.0)),
-                ('material_specular', (.8, .8, .8, 1.0)),
-                ('material_shininess', (.8,)),
+                ('material_ambient', (.2, .8, .2, 1.0)),
+                ('material_diffuse', (.2, .8, .2, 1.0)),
+                ('material_specular', (.5, .5, .5, 1.0)),
+                ('material_shininess', (0,)),
             ]:
                 self.shader.setuniform(name, val)
             for k in Light._fields:
