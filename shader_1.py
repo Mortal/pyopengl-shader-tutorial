@@ -219,19 +219,22 @@ class TestContext(BaseContext):
     """
     Demonstrates use of attribute types in GLSL
     """
-    def OnInit(self):
+
+    def get_lights(self):
+        light1 = self.angle + np.pi * 1.2
+        light2 = self.angle + np.pi * 1.8
         light_nodes = [
             N.DirectionalLight(
                 color=(.1, .8, 0),
                 intensity=0.8,
                 ambientIntensity=0.1,
-                direction=(-.4, -.4, -1),
+                direction=(np.cos(light1), np.sin(light1), -1),
             ),
             N.DirectionalLight(
                 color=(.1, .8, 0),
                 intensity=0.4,
                 ambientIntensity=0.1,
-                direction=(.4, -.4, -1),
+                direction=(np.cos(light2), np.sin(light2), -1),
             ),
             # N.SpotLight(
             #     location=(0.5, 0.5, 1),
@@ -251,9 +254,13 @@ class TestContext(BaseContext):
             #     attenuation=(0, .5, 0),
             # ),
         ]
-        self.lights = [self.light_node_as_struct(l) for l in light_nodes]
+        return [self.light_node_as_struct(l) for l in light_nodes]
+
+    def OnInit(self):
+        self.angle = 0
+
         shader_common = read_shader(
-            'shader_common.h', D={'NLIGHTS': len(self.lights)})
+            'shader_common.h', D={'NLIGHTS': len(self.get_lights())})
 
         phong_weightCalc = read_shader('phong_weightCalc.h')
         phong_preCalc = read_shader('phong_preCalc.h')
@@ -265,8 +272,6 @@ class TestContext(BaseContext):
             read_shader('vertex.h'),
             shader_common + phong_weightCalc +
             read_shader('fragment.h'))
-
-        self.angle = 0
 
         self.time = Timer(duration=20.0, repeating=1)
         self.time.addEventHandler("fraction", self.OnTimerFraction)
@@ -435,9 +440,10 @@ class TestContext(BaseContext):
                 ('material_shininess', (1,)),
             ]:
                 self.shader.setuniform(name, val)
+            lights = self.get_lights()
             for k in Light._fields:
                 self.shader.setuniforms(
-                    'lights_' + k, [getattr(l, k) for l in self.lights])
+                    'lights_' + k, [getattr(l, k) for l in lights])
             self.set_view()
             self.shader.draw()
 
