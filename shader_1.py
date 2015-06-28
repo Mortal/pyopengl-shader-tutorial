@@ -392,18 +392,18 @@ class TestContext(BaseContext):
                 if a + c > b + d:
                     # bd is the lower diagonal
                     ts.append(np.asarray([
-                        i, j, a, i, j + 1, b, i + 1, j, d
+                        j, i, a, j + 1, i, b, j, i + 1, d
                     ]))
                     ts.append(np.asarray([
-                        i, j + 1, b, i + 1, j + 1, c, i + 1, j, d
+                        j + 1, i, b, j + 1, i + 1, c, j, i + 1, d
                     ]))
                 else:
                     # ac is the lower diagonal
                     ts.append(np.asarray([
-                        i, j, a, i + 1, j + 1, c, i + 1, j, d
+                        j, i, a, j + 1, i + 1, c, j, i + 1, d
                     ]))
                     ts.append(np.asarray([
-                        i, j, a, i, j + 1, b, i + 1, j + 1, c
+                        j, i, a, j + 1, i, b, j + 1, i + 1, c
                     ]))
                     pass
         ts = np.asarray(ts)
@@ -411,8 +411,8 @@ class TestContext(BaseContext):
         p1 = ts[:, 0:3]
         p2 = ts[:, 3:6]
         p3 = ts[:, 6:9]
-        n = np.cross(p3 - p1, p2 - p1)  # surface normals
-        v = np.c_[p1, n, p3, n, p2, n].reshape(3 * nts, 2, 3)
+        n = np.cross(p2 - p1, p3 - p1)  # surface normals
+        v = np.c_[p1, n, p2, n, p3, n].reshape(3 * nts, 2, 3)
         self.normalize_vertices(v[:, 0, :])
         self.shader.set_vertices(v)
 
