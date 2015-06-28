@@ -384,35 +384,35 @@ class TestContext(BaseContext):
 
     def set_terrain_ttd(self):
         heights = self.load_terrain()
-        ts = []
-        for i, (r1, r2) in enumerate(zip(heights[:-1], heights[1:])):
-            # quads are right-handed counter-clockwise
-            cells = zip(r1[:-1], r1[1:], r2[1:], r2[:-1])
-            for j, (a, b, c, d) in enumerate(cells):
-                if a + c > b + d:
-                    # bd is the lower diagonal
-                    ts.append(np.asarray([
-                        j, i, a, j + 1, i, b, j, i + 1, d
-                    ]))
-                    ts.append(np.asarray([
-                        j + 1, i, b, j + 1, i + 1, c, j, i + 1, d
-                    ]))
-                else:
-                    # ac is the lower diagonal
-                    ts.append(np.asarray([
-                        j, i, a, j + 1, i + 1, c, j, i + 1, d
-                    ]))
-                    ts.append(np.asarray([
-                        j, i, a, j + 1, i, b, j + 1, i + 1, c
-                    ]))
-                    pass
-        ts = np.asarray(ts)
-        nts = len(ts)  # number of triangles
+
+        ys, xs = np.indices(heights.shape)
+        xyz = np.dstack((xs, ys, heights))
+        aa = xyz[:-1, :-1]
+        bb = xyz[:-1, 1:]
+        cc = xyz[1:, 1:]
+        dd = xyz[1:, :-1]
+        # ac[y, x] and bd[y, x] are the two ways of triangulating the
+        # [x, x+1]*[y, y+1] quad
+        bd = np.concatenate((aa, bb, dd, bb, cc, dd), axis=2)
+        ac = np.concatenate((aa, cc, dd, aa, bb, cc), axis=2)
+
+        # bd_lower[y, x] is true if the bd diagonal is lower than ac
+        bd_lower = aa[:, :, 2] + cc[:, :, 2] > bb[:, :, 2] + dd[:, :, 2]
+        # ts[y, x, :] is the triangulation of the [x, x+1]*[y, y+1] quad
+        # with the lower diagonal.
+        ts = np.choose(bd_lower[:, :, np.newaxis], (ac, bd))
+        # Number of triangles = 2 * number of quads
+        nts = 2 * ts.shape[0] * ts.shape[1]
+        # Reshape to list of triangles
+        ts = ts.reshape((nts, 9))
+        # Compute the surface normals
         p1 = ts[:, 0:3]
         p2 = ts[:, 3:6]
         p3 = ts[:, 6:9]
         n = np.cross(p2 - p1, p3 - p1)  # surface normals
+        # Turn into list of (point xyz, normal xyz)
         v = np.c_[p1, n, p2, n, p3, n].reshape(3 * nts, 2, 3)
+        # Normalize all point xyz
         self.normalize_vertices(v[:, 0, :])
         self.shader.set_vertices(v)
 
